@@ -1,5 +1,6 @@
 mod db;
 mod error;
+mod ffi;
 
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
