@@ -193,22 +193,6 @@ pub async fn upsert_category(pool: &SqlitePool, name: &str) -> AppResult<i64> {
     Ok(id)
 }
 
-pub async fn get_category(pool: &SqlitePool, id: i64) -> AppResult<Option<Category>> {
-    let row = sqlx::query("SELECT id, name FROM categories WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-
-    match row {
-        Some(row) => {
-            let id: i64 = row.try_get("id")?;
-            let name: String = row.try_get("name")?;
-            Ok(Some(Category { id: Some(id), name }))
-        }
-        None => Ok(None),
-    }
-}
-
 pub async fn list_categories(pool: &SqlitePool) -> AppResult<Vec<Category>> {
     let rows = sqlx::query("SELECT id, name FROM categories ORDER BY name")
         .fetch_all(pool)
@@ -581,6 +565,11 @@ pub async fn get_transaction(pool: &SqlitePool, id: i64) -> AppResult<Option<Tra
             let desc: String = row.try_get("description")?;
             let cat_id: Option<i64> = row.try_get("category_id").ok().flatten();
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
+            
+            // Fetch tags and persons
+            let tags = get_transaction_tags(pool, id).await?;
+            let persons = get_transaction_persons(pool, id).await?;
+            
             Ok(Some(Transaction {
                 id: Some(id),
                 amount,
@@ -590,8 +579,8 @@ pub async fn get_transaction(pool: &SqlitePool, id: i64) -> AppResult<Option<Tra
                 place_id,
                 category_name: None,
                 place_name: None,
-                tag_names: Vec::new(),
-                person_names: Vec::new(),
+                tag_names: tags.into_iter().map(|t| t.name).collect(),
+                person_names: persons.into_iter().map(|p| p.name).collect(),
             }))
         }
         None => Ok(None),
@@ -791,6 +780,11 @@ pub async fn get_activity(pool: &SqlitePool, id: i64) -> AppResult<Option<Activi
             let desc: String = row.try_get("description")?;
             let cat_id: Option<i64> = row.try_get("category_id").ok().flatten();
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
+            
+            // Fetch tags and persons
+            let tags = get_activity_tags(pool, id).await?;
+            let persons = get_activity_persons(pool, id).await?;
+            
             Ok(Some(Activity {
                 id: Some(id),
                 start_time: start,
@@ -800,8 +794,8 @@ pub async fn get_activity(pool: &SqlitePool, id: i64) -> AppResult<Option<Activi
                 place_id,
                 category_name: None,
                 place_name: None,
-                tag_names: Vec::new(),
-                person_names: Vec::new(),
+                tag_names: tags.into_iter().map(|t| t.name).collect(),
+                person_names: persons.into_iter().map(|p| p.name).collect(),
             }))
         }
         None => Ok(None),
