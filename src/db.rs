@@ -1,7 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use std::path::PathBuf;
 use crate::error::AppResult;
-use crate::{Transaction, Activity, Category, Place};
+use crate::{Transaction, Activity, Category, Place, Tag, Person};
 
 pub async fn connect_db(db_path: Option<PathBuf>) -> AppResult<SqlitePool> {
     let path = if let Some(p) = db_path {
@@ -43,6 +43,90 @@ pub async fn init_tables(pool: &SqlitePool) -> AppResult<()> {
         CREATE TABLE IF NOT EXISTS places (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Tags table (many-to-many with transactions and activities)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Transaction-Tags junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS transaction_tags (
+            transaction_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (transaction_id, tag_id),
+            FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Activity-Tags junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS activity_tags (
+            activity_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (activity_id, tag_id),
+            FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Persons table (many-to-many with transactions and activities)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS persons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Transaction-Persons junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS transaction_persons (
+            transaction_id INTEGER NOT NULL,
+            person_id INTEGER NOT NULL,
+            PRIMARY KEY (transaction_id, person_id),
+            FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Activity-Persons junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS activity_persons (
+            activity_id INTEGER NOT NULL,
+            person_id INTEGER NOT NULL,
+            PRIMARY KEY (activity_id, person_id),
+            FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
         );
         "#,
     )
@@ -215,6 +299,252 @@ pub async fn delete_place(pool: &SqlitePool, id: i64) -> AppResult<()> {
     Ok(())
 }
 
+// ----- Tag DB Operations -----
+
+pub async fn upsert_tag(pool: &SqlitePool, name: &str) -> AppResult<i64> {
+    sqlx::query("INSERT OR IGNORE INTO tags (name) VALUES (?)")
+        .bind(name)
+        .execute(pool)
+        .await?;
+
+    let row = sqlx::query("SELECT id FROM tags WHERE name = ?")
+        .bind(name)
+        .fetch_one(pool)
+        .await?;
+
+    let id: i64 = row.try_get("id")?;
+    Ok(id)
+}
+
+pub async fn list_tags(pool: &SqlitePool) -> AppResult<Vec<Tag>> {
+    let rows = sqlx::query("SELECT id, name FROM tags ORDER BY name")
+        .fetch_all(pool)
+        .await?;
+
+    let mut tags = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        tags.push(Tag { id: Some(id), name });
+    }
+    Ok(tags)
+}
+
+pub async fn delete_tag(pool: &SqlitePool, id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM transaction_tags WHERE tag_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query("DELETE FROM activity_tags WHERE tag_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query("DELETE FROM tags WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn set_transaction_tags(pool: &SqlitePool, transaction_id: i64, tag_ids: &[i64]) -> AppResult<()> {
+    // Delete existing tags
+    sqlx::query("DELETE FROM transaction_tags WHERE transaction_id = ?")
+        .bind(transaction_id)
+        .execute(pool)
+        .await?;
+
+    // Insert new tags
+    for tag_id in tag_ids {
+        sqlx::query("INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)")
+            .bind(transaction_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn set_activity_tags(pool: &SqlitePool, activity_id: i64, tag_ids: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM activity_tags WHERE activity_id = ?")
+        .bind(activity_id)
+        .execute(pool)
+        .await?;
+
+    for tag_id in tag_ids {
+        sqlx::query("INSERT INTO activity_tags (activity_id, tag_id) VALUES (?, ?)")
+            .bind(activity_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_transaction_tags(pool: &SqlitePool, transaction_id: i64) -> AppResult<Vec<Tag>> {
+    let rows = sqlx::query(
+        "SELECT t.id, t.name FROM tags t 
+         INNER JOIN transaction_tags tt ON t.id = tt.tag_id 
+         WHERE tt.transaction_id = ?"
+    )
+    .bind(transaction_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut tags = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        tags.push(Tag { id: Some(id), name });
+    }
+    Ok(tags)
+}
+
+pub async fn get_activity_tags(pool: &SqlitePool, activity_id: i64) -> AppResult<Vec<Tag>> {
+    let rows = sqlx::query(
+        "SELECT t.id, t.name FROM tags t 
+         INNER JOIN activity_tags at ON t.id = at.tag_id 
+         WHERE at.activity_id = ?"
+    )
+    .bind(activity_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut tags = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        tags.push(Tag { id: Some(id), name });
+    }
+    Ok(tags)
+}
+
+// ----- Person DB Operations -----
+
+pub async fn upsert_person(pool: &SqlitePool, name: &str) -> AppResult<i64> {
+    sqlx::query("INSERT OR IGNORE INTO persons (name) VALUES (?)")
+        .bind(name)
+        .execute(pool)
+        .await?;
+
+    let row = sqlx::query("SELECT id FROM persons WHERE name = ?")
+        .bind(name)
+        .fetch_one(pool)
+        .await?;
+
+    let id: i64 = row.try_get("id")?;
+    Ok(id)
+}
+
+pub async fn list_persons(pool: &SqlitePool) -> AppResult<Vec<Person>> {
+    let rows = sqlx::query("SELECT id, name FROM persons ORDER BY name")
+        .fetch_all(pool)
+        .await?;
+
+    let mut persons = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        persons.push(Person { id: Some(id), name });
+    }
+    Ok(persons)
+}
+
+pub async fn delete_person(pool: &SqlitePool, id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM transaction_persons WHERE person_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query("DELETE FROM activity_persons WHERE person_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query("DELETE FROM persons WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn set_transaction_persons(pool: &SqlitePool, transaction_id: i64, person_ids: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM transaction_persons WHERE transaction_id = ?")
+        .bind(transaction_id)
+        .execute(pool)
+        .await?;
+
+    for person_id in person_ids {
+        sqlx::query("INSERT INTO transaction_persons (transaction_id, person_id) VALUES (?, ?)")
+            .bind(transaction_id)
+            .bind(person_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn set_activity_persons(pool: &SqlitePool, activity_id: i64, person_ids: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM activity_persons WHERE activity_id = ?")
+        .bind(activity_id)
+        .execute(pool)
+        .await?;
+
+    for person_id in person_ids {
+        sqlx::query("INSERT INTO activity_persons (activity_id, person_id) VALUES (?, ?)")
+            .bind(activity_id)
+            .bind(person_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_transaction_persons(pool: &SqlitePool, transaction_id: i64) -> AppResult<Vec<Person>> {
+    let rows = sqlx::query(
+        "SELECT p.id, p.name FROM persons p 
+         INNER JOIN transaction_persons tp ON p.id = tp.person_id 
+         WHERE tp.transaction_id = ?"
+    )
+    .bind(transaction_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut persons = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        persons.push(Person { id: Some(id), name });
+    }
+    Ok(persons)
+}
+
+pub async fn get_activity_persons(pool: &SqlitePool, activity_id: i64) -> AppResult<Vec<Person>> {
+    let rows = sqlx::query(
+        "SELECT p.id, p.name FROM persons p 
+         INNER JOIN activity_persons ap ON p.id = ap.person_id 
+         WHERE ap.activity_id = ?"
+    )
+    .bind(activity_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut persons = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        persons.push(Person { id: Some(id), name });
+    }
+    Ok(persons)
+}
+
 // ----- Transaction DB Operations -----
 
 pub async fn add_transaction(
@@ -260,6 +590,8 @@ pub async fn get_transaction(pool: &SqlitePool, id: i64) -> AppResult<Option<Tra
                 place_id,
                 category_name: None,
                 place_name: None,
+                tag_names: Vec::new(),
+                person_names: Vec::new(),
             }))
         }
         None => Ok(None),
@@ -351,6 +683,8 @@ pub async fn list_transactions(
             place_id,
             category_name: None,
             place_name: None,
+            tag_names: Vec::new(),
+            person_names: Vec::new(),
         });
     }
     Ok(transactions)
@@ -466,6 +800,8 @@ pub async fn get_activity(pool: &SqlitePool, id: i64) -> AppResult<Option<Activi
                 place_id,
                 category_name: None,
                 place_name: None,
+                tag_names: Vec::new(),
+                person_names: Vec::new(),
             }))
         }
         None => Ok(None),
@@ -529,6 +865,8 @@ pub async fn list_activities(
             place_id,
             category_name: None,
             place_name: None,
+            tag_names: Vec::new(),
+            person_names: Vec::new(),
         });
     }
     Ok(activities)

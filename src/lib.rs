@@ -23,6 +23,18 @@ pub struct Place {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Tag {
+    pub id: Option<i64>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Person {
+    pub id: Option<i64>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Transaction {
     pub id: Option<i64>,
     pub amount: f64,
@@ -34,6 +46,10 @@ pub struct Transaction {
     pub category_name: Option<String>,
     #[serde(rename = "place", default)]
     pub place_name: Option<String>,
+    #[serde(rename = "tags", default)]
+    pub tag_names: Vec<String>,
+    #[serde(rename = "persons", default)]
+    pub person_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -48,6 +64,10 @@ pub struct Activity {
     pub category_name: Option<String>,
     #[serde(rename = "place", default)]
     pub place_name: Option<String>,
+    #[serde(rename = "tags", default)]
+    pub tag_names: Vec<String>,
+    #[serde(rename = "persons", default)]
+    pub person_names: Vec<String>,
 }
 
 // ============== Request Types ==============
@@ -128,6 +148,28 @@ impl Tracker {
                 Ok((None, format!("Place #{} deleted", args.id)))
             }
 
+            // Tag operations
+            "list_tags" => {
+                let tags = db::list_tags(&self.pool).await?;
+                Ok((Some(serde_json::to_value(&tags)?), format!("{} tag(s) found", tags.len())))
+            }
+            "delete_tag" => {
+                let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
+                db::delete_tag(&self.pool, args.id).await?;
+                Ok((None, format!("Tag #{} deleted", args.id)))
+            }
+
+            // Person operations
+            "list_persons" => {
+                let persons = db::list_persons(&self.pool).await?;
+                Ok((Some(serde_json::to_value(&persons)?), format!("{} person(s) found", persons.len())))
+            }
+            "delete_person" => {
+                let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
+                db::delete_person(&self.pool, args.id).await?;
+                Ok((None, format!("Person #{} deleted", args.id)))
+            }
+
             // Transaction operations
             "create_transaction" => {
                 let tx: Transaction = serde_json::from_value(request.args.clone())?;
@@ -142,6 +184,25 @@ impl Tracker {
                     None
                 };
                 let id = db::add_transaction(&self.pool, tx.amount, &tx.kind, &tx.description, category_id, place_id).await?;
+                
+                // Handle tags (many-to-many)
+                if !tx.tag_names.is_empty() {
+                    let mut tag_ids = Vec::new();
+                    for tag_name in &tx.tag_names {
+                        tag_ids.push(db::upsert_tag(&self.pool, tag_name).await?);
+                    }
+                    db::set_transaction_tags(&self.pool, id, &tag_ids).await?;
+                }
+                
+                // Handle persons (many-to-many)
+                if !tx.person_names.is_empty() {
+                    let mut person_ids = Vec::new();
+                    for person_name in &tx.person_names {
+                        person_ids.push(db::upsert_person(&self.pool, person_name).await?);
+                    }
+                    db::set_transaction_persons(&self.pool, id, &person_ids).await?;
+                }
+                
                 Ok((Some(serde_json::json!({ "id": id })), format!("Transaction #{} created", id)))
             }
             "get_transaction" => {
@@ -193,6 +254,25 @@ impl Tracker {
                     None
                 };
                 let id = db::add_activity(&self.pool, &activity.start_time, &activity.stop_time, &activity.description, category_id, place_id).await?;
+                
+                // Handle tags (many-to-many)
+                if !activity.tag_names.is_empty() {
+                    let mut tag_ids = Vec::new();
+                    for tag_name in &activity.tag_names {
+                        tag_ids.push(db::upsert_tag(&self.pool, tag_name).await?);
+                    }
+                    db::set_activity_tags(&self.pool, id, &tag_ids).await?;
+                }
+                
+                // Handle persons (many-to-many)
+                if !activity.person_names.is_empty() {
+                    let mut person_ids = Vec::new();
+                    for person_name in &activity.person_names {
+                        person_ids.push(db::upsert_person(&self.pool, person_name).await?);
+                    }
+                    db::set_activity_persons(&self.pool, id, &person_ids).await?;
+                }
+                
                 Ok((Some(serde_json::json!({ "id": id })), format!("Activity #{} created", id)))
             }
             "get_activity" => {

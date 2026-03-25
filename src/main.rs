@@ -45,6 +45,14 @@ mod cli {
         // Shared place field
         #[arg(long)]
         pub place: Option<String>,
+
+        // Tags (comma-separated for CLI)
+        #[arg(long, value_delimiter = ',')]
+        pub tags: Vec<String>,
+
+        // Persons (comma-separated for CLI)
+        #[arg(long, value_delimiter = ',')]
+        pub persons: Vec<String>,
     }
 
     pub fn run() -> anyhow::Result<()> {
@@ -90,6 +98,12 @@ mod cli {
                     }
                     if let Some(place) = &cli.place {
                         args["place"] = json!(place);
+                    }
+                    if !cli.tags.is_empty() {
+                        args["tags"] = json!(&cli.tags);
+                    }
+                    if !cli.persons.is_empty() {
+                        args["persons"] = json!(&cli.persons);
                     }
                     Ok(Request {
                         tool: "create_transaction".into(),
@@ -155,6 +169,12 @@ mod cli {
                     }
                     if let Some(place) = &cli.place {
                         args["place"] = json!(place);
+                    }
+                    if !cli.tags.is_empty() {
+                        args["tags"] = json!(&cli.tags);
+                    }
+                    if !cli.persons.is_empty() {
+                        args["persons"] = json!(&cli.persons);
                     }
                     Ok(Request {
                         tool: "create_activity".into(),
