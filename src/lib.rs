@@ -40,16 +40,17 @@ pub struct Request {
 pub struct Response {
     pub success: bool,
     pub data: Option<serde_json::Value>,
+    pub message: Option<String>,
     pub error: Option<String>,
 }
 
 impl Response {
-    pub fn success(data: Option<serde_json::Value>) -> Self {
-        Self { success: true, data, error: None }
+    pub fn success(data: Option<serde_json::Value>, message: impl Into<String>) -> Self {
+        Self { success: true, data, error: None, message: Some(message.into()) }
     }
 
     pub fn error(msg: impl Into<String>) -> Self {
-        Self { success: false, data: None, error: Some(msg.into()) }
+        Self { success: false, data: None, error: Some(msg.into()), message: None }
     }
 }
 
@@ -74,64 +75,72 @@ impl Tracker {
     /// Single entry point: accepts request, returns response
     pub async fn handle(&self, request: &Request) -> Response {
         match self.process_request(request).await {
-            Ok(data) => Response::success(data),
+            Ok((data, message)) => Response::success(data, message),
             Err(e) => Response::error(e.to_string()),
         }
     }
 
-    async fn process_request(&self, request: &Request) -> AppResult<Option<serde_json::Value>> {
+    async fn process_request(&self, request: &Request) -> AppResult<(Option<serde_json::Value>, String)> {
         match request.tool.as_str() {
             // Transaction operations
             "create_transaction" => {
                 let tx: Transaction = serde_json::from_value(request.args.clone())?;
                 let id = db::add_transaction(&self.pool, tx.amount, &tx.kind, &tx.description).await?;
-                Ok(Some(serde_json::json!({ "id": id })))
+                Ok((Some(serde_json::json!({ "id": id })), format!("Transaction #{} created", id)))
             }
             "get_transaction" => {
                 let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
                 let tx = db::get_transaction(&self.pool, args.id).await?;
-                Ok(serde_json::to_value(tx).ok())
+                match tx {
+                    Some(_) => Ok((serde_json::to_value(tx).ok(), "Transaction found".to_string())),
+                    None => Ok((None, "Transaction not found".to_string())),
+                }
             }
             "list_transactions" => {
                 let kind: Option<String> = serde_json::from_value(request.args.clone()).unwrap_or(None);
                 let txs = db::list_transactions(&self.pool, kind.as_deref()).await?;
-                Ok(Some(serde_json::to_value(txs)?))
+                let count = txs.len();
+                Ok((Some(serde_json::to_value(txs)?), format!("{} transaction(s) found", count)))
             }
             "update_transaction" => {
                 let args: UpdateTransactionArgs = serde_json::from_value(request.args.clone())?;
                 db::update_transaction(&self.pool, args.id, args.amount, args.kind.as_deref(), args.description.as_deref()).await?;
-                Ok(None)
+                Ok((None, format!("Transaction #{} updated", args.id)))
             }
             "delete_transaction" => {
                 let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
                 db::delete_transaction(&self.pool, args.id).await?;
-                Ok(None)
+                Ok((None, format!("Transaction #{} deleted", args.id)))
             }
 
             // Activity operations
             "create_activity" => {
                 let activity: Activity = serde_json::from_value(request.args.clone())?;
                 let id = db::add_activity(&self.pool, &activity.start_time, &activity.stop_time, &activity.description).await?;
-                Ok(Some(serde_json::json!({ "id": id })))
+                Ok((Some(serde_json::json!({ "id": id })), format!("Activity #{} created", id)))
             }
             "get_activity" => {
                 let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
                 let activity = db::get_activity(&self.pool, args.id).await?;
-                Ok(serde_json::to_value(activity).ok())
+                match activity {
+                    Some(_) => Ok((serde_json::to_value(activity).ok(), "Activity found".to_string())),
+                    None => Ok((None, "Activity not found".to_string())),
+                }
             }
             "list_activities" => {
                 let activities = db::list_activities(&self.pool).await?;
-                Ok(Some(serde_json::to_value(activities)?))
+                let count = activities.len();
+                Ok((Some(serde_json::to_value(activities)?), format!("{} activity(ies) found", count)))
             }
             "update_activity" => {
                 let args: UpdateActivityArgs = serde_json::from_value(request.args.clone())?;
                 db::update_activity(&self.pool, args.id, args.start_time.as_deref(), args.stop_time.as_deref(), args.description.as_deref()).await?;
-                Ok(None)
+                Ok((None, format!("Activity #{} updated", args.id)))
             }
             "delete_activity" => {
                 let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
                 db::delete_activity(&self.pool, args.id).await?;
-                Ok(None)
+                Ok((None, format!("Activity #{} deleted", args.id)))
             }
 
             _ => Err(AppError::ValidationError(format!("Unknown tool: {}", request.tool))),
