@@ -37,6 +37,10 @@ mod cli {
         pub stop: Option<String>,
         #[arg(long)]
         pub activity_desc: Option<String>,
+
+        // Shared category field
+        #[arg(long)]
+        pub category: Option<String>,
     }
 
     pub fn run() -> anyhow::Result<()> {
@@ -72,29 +76,49 @@ mod cli {
                     let amount = cli.amount.ok_or_else(|| anyhow::anyhow!("--amount is required"))?;
                     let kind = cli.kind.clone().ok_or_else(|| anyhow::anyhow!("--kind is required"))?;
                     let desc = cli.desc.clone().unwrap_or_default();
+                    let mut args = json!({
+                        "amount": amount,
+                        "kind": kind,
+                        "description": desc
+                    });
+                    if let Some(cat) = &cli.category {
+                        args["category"] = json!(cat);
+                    }
                     Ok(Request {
                         tool: "create_transaction".into(),
-                        args: json!({
-                            "amount": amount,
-                            "kind": kind,
-                            "description": desc
-                        }),
+                        args,
                     })
                 }
-                "list" => Ok(Request {
-                    tool: "list_transactions".into(),
-                    args: json!({ "kind": cli.kind }),
-                }),
+                "list" => {
+                    let mut args = json!({});
+                    if let Some(kind) = &cli.kind {
+                        args["kind"] = json!(kind);
+                    }
+                    Ok(Request {
+                        tool: "list_transactions".into(),
+                        args,
+                    })
+                }
                 "update" => {
                     let id = cli.id.ok_or_else(|| anyhow::anyhow!("--id is required"))?;
+                    let mut args = json!({
+                        "id": id,
+                    });
+                    if let Some(amount) = cli.amount {
+                        args["amount"] = json!(amount);
+                    }
+                    if let Some(kind) = &cli.kind {
+                        args["kind"] = json!(kind);
+                    }
+                    if let Some(desc) = &cli.desc {
+                        args["description"] = json!(desc);
+                    }
+                    if let Some(cat) = &cli.category {
+                        args["category"] = json!(cat);
+                    }
                     Ok(Request {
                         tool: "update_transaction".into(),
-                        args: json!({
-                            "id": id,
-                            "amount": cli.amount,
-                            "kind": cli.kind,
-                            "description": cli.desc
-                        }),
+                        args,
                     })
                 }
                 "delete" => {
@@ -111,13 +135,17 @@ mod cli {
                     let start = cli.start.clone().ok_or_else(|| anyhow::anyhow!("--start is required"))?;
                     let stop = cli.stop.clone().ok_or_else(|| anyhow::anyhow!("--stop is required"))?;
                     let desc = cli.activity_desc.clone().unwrap_or_default();
+                    let mut args = json!({
+                        "start_time": start,
+                        "stop_time": stop,
+                        "description": desc
+                    });
+                    if let Some(cat) = &cli.category {
+                        args["category"] = json!(cat);
+                    }
                     Ok(Request {
                         tool: "create_activity".into(),
-                        args: json!({
-                            "start_time": start,
-                            "stop_time": stop,
-                            "description": desc
-                        }),
+                        args,
                     })
                 }
                 "list" => Ok(Request {
