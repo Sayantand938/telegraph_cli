@@ -75,7 +75,9 @@ pub extern "C" fn tracker_init(db_path: *const c_char) -> *mut TrackerHandle {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tracker_free(handle: *mut TrackerHandle) {
     if !handle.is_null() {
-        let _ = Box::from_raw(handle);
+        unsafe {
+            let _ = Box::from_raw(handle);
+        }
     }
 }
 
@@ -101,12 +103,12 @@ pub unsafe extern "C" fn tracker_request(
         return ptr::null();
     }
 
-    let request_str = match CStr::from_ptr(json_request).to_str() {
+    let request_str = match unsafe { CStr::from_ptr(json_request) }.to_str() {
         Ok(s) => s,
         Err(_) => return ptr::null(),
     };
 
-    let tracker = &(*handle).tracker;
+    let tracker = &unsafe { &*handle }.tracker;
     let rt = get_runtime();
 
     let request: crate::Request = match serde_json::from_str(request_str) {
@@ -157,7 +159,7 @@ pub unsafe extern "C" fn tracker_handle_json(
         return ptr::null();
     }
 
-    let request_str = match CStr::from_ptr(json_request).to_str() {
+    let request_str = match unsafe { CStr::from_ptr(json_request) }.to_str() {
         Ok(s) => s,
         Err(_) => return ptr::null(),
     };
@@ -165,7 +167,7 @@ pub unsafe extern "C" fn tracker_handle_json(
     let db_path_opt = if db_path.is_null() {
         None
     } else {
-        match CStr::from_ptr(db_path).to_str() {
+        match unsafe { CStr::from_ptr(db_path) }.to_str() {
             Ok(s) => Some(PathBuf::from(s.to_string())),
             Err(_) => return ptr::null(),
         }
