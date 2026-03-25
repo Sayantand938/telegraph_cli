@@ -41,6 +41,10 @@ mod cli {
         // Shared category field
         #[arg(long)]
         pub category: Option<String>,
+
+        // Shared place field
+        #[arg(long)]
+        pub place: Option<String>,
     }
 
     pub fn run() -> anyhow::Result<()> {
@@ -84,6 +88,9 @@ mod cli {
                     if let Some(cat) = &cli.category {
                         args["category"] = json!(cat);
                     }
+                    if let Some(place) = &cli.place {
+                        args["place"] = json!(place);
+                    }
                     Ok(Request {
                         tool: "create_transaction".into(),
                         args,
@@ -116,6 +123,9 @@ mod cli {
                     if let Some(cat) = &cli.category {
                         args["category"] = json!(cat);
                     }
+                    if let Some(place) = &cli.place {
+                        args["place"] = json!(place);
+                    }
                     Ok(Request {
                         tool: "update_transaction".into(),
                         args,
@@ -142,6 +152,9 @@ mod cli {
                     });
                     if let Some(cat) = &cli.category {
                         args["category"] = json!(cat);
+                    }
+                    if let Some(place) = &cli.place {
+                        args["place"] = json!(place);
                     }
                     Ok(Request {
                         tool: "create_activity".into(),

@@ -17,14 +17,23 @@ pub struct Category {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Place {
+    pub id: Option<i64>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Transaction {
     pub id: Option<i64>,
     pub amount: f64,
     pub kind: String,
     pub description: String,
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
+    #[serde(rename = "place", default)]
+    pub place_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -34,8 +43,11 @@ pub struct Activity {
     pub stop_time: String,
     pub description: String,
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
+    #[serde(rename = "place", default)]
+    pub place_name: Option<String>,
 }
 
 // ============== Request Types ==============
@@ -105,6 +117,17 @@ impl Tracker {
                 Ok((None, format!("Category #{} deleted", args.id)))
             }
 
+            // Place operations
+            "list_places" => {
+                let places = db::list_places(&self.pool).await?;
+                Ok((Some(serde_json::to_value(&places)?), format!("{} place(s) found", places.len())))
+            }
+            "delete_place" => {
+                let args: GetIdArgs = serde_json::from_value(request.args.clone())?;
+                db::delete_place(&self.pool, args.id).await?;
+                Ok((None, format!("Place #{} deleted", args.id)))
+            }
+
             // Transaction operations
             "create_transaction" => {
                 let tx: Transaction = serde_json::from_value(request.args.clone())?;
@@ -113,7 +136,12 @@ impl Tracker {
                 } else {
                     None
                 };
-                let id = db::add_transaction(&self.pool, tx.amount, &tx.kind, &tx.description, category_id).await?;
+                let place_id = if let Some(place_name) = tx.place_name {
+                    Some(db::upsert_place(&self.pool, &place_name).await?)
+                } else {
+                    None
+                };
+                let id = db::add_transaction(&self.pool, tx.amount, &tx.kind, &tx.description, category_id, place_id).await?;
                 Ok((Some(serde_json::json!({ "id": id })), format!("Transaction #{} created", id)))
             }
             "get_transaction" => {
@@ -126,7 +154,7 @@ impl Tracker {
             }
             "list_transactions" => {
                 let args: ListTransactionsArgs = serde_json::from_value(request.args.clone()).unwrap_or_default();
-                let txs = db::list_transactions(&self.pool, args.kind.as_deref(), args.category_id).await?;
+                let txs = db::list_transactions(&self.pool, args.kind.as_deref(), args.category_id, args.place_id).await?;
                 let count = txs.len();
                 Ok((Some(serde_json::to_value(txs)?), format!("{} transaction(s) found", count)))
             }
@@ -137,7 +165,12 @@ impl Tracker {
                 } else {
                     args.category_id
                 };
-                db::update_transaction(&self.pool, args.id, args.amount, args.kind.as_deref(), args.description.as_deref(), category_id).await?;
+                let place_id = if let Some(place_name) = args.place_name {
+                    Some(db::upsert_place(&self.pool, &place_name).await?)
+                } else {
+                    args.place_id
+                };
+                db::update_transaction(&self.pool, args.id, args.amount, args.kind.as_deref(), args.description.as_deref(), category_id, place_id).await?;
                 Ok((None, format!("Transaction #{} updated", args.id)))
             }
             "delete_transaction" => {
@@ -154,7 +187,12 @@ impl Tracker {
                 } else {
                     None
                 };
-                let id = db::add_activity(&self.pool, &activity.start_time, &activity.stop_time, &activity.description, category_id).await?;
+                let place_id = if let Some(place_name) = activity.place_name {
+                    Some(db::upsert_place(&self.pool, &place_name).await?)
+                } else {
+                    None
+                };
+                let id = db::add_activity(&self.pool, &activity.start_time, &activity.stop_time, &activity.description, category_id, place_id).await?;
                 Ok((Some(serde_json::json!({ "id": id })), format!("Activity #{} created", id)))
             }
             "get_activity" => {
@@ -167,7 +205,7 @@ impl Tracker {
             }
             "list_activities" => {
                 let args: ListActivitiesArgs = serde_json::from_value(request.args.clone()).unwrap_or_default();
-                let activities = db::list_activities(&self.pool, args.category_id).await?;
+                let activities = db::list_activities(&self.pool, args.category_id, args.place_id).await?;
                 let count = activities.len();
                 Ok((Some(serde_json::to_value(activities)?), format!("{} activity(ies) found", count)))
             }
@@ -178,7 +216,12 @@ impl Tracker {
                 } else {
                     args.category_id
                 };
-                db::update_activity(&self.pool, args.id, args.start_time.as_deref(), args.stop_time.as_deref(), args.description.as_deref(), category_id).await?;
+                let place_id = if let Some(place_name) = args.place_name {
+                    Some(db::upsert_place(&self.pool, &place_name).await?)
+                } else {
+                    args.place_id
+                };
+                db::update_activity(&self.pool, args.id, args.start_time.as_deref(), args.stop_time.as_deref(), args.description.as_deref(), category_id, place_id).await?;
                 Ok((None, format!("Activity #{} updated", args.id)))
             }
             "delete_activity" => {
@@ -203,11 +246,13 @@ pub struct GetIdArgs {
 pub struct ListTransactionsArgs {
     pub kind: Option<String>,
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListActivitiesArgs {
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,8 +262,11 @@ pub struct UpdateTransactionArgs {
     pub kind: Option<String>,
     pub description: Option<String>,
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
     #[serde(rename = "category")]
     pub category_name: Option<String>,
+    #[serde(rename = "place")]
+    pub place_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,8 +276,11 @@ pub struct UpdateActivityArgs {
     pub stop_time: Option<String>,
     pub description: Option<String>,
     pub category_id: Option<i64>,
+    pub place_id: Option<i64>,
     #[serde(rename = "category")]
     pub category_name: Option<String>,
+    #[serde(rename = "place")]
+    pub place_name: Option<String>,
 }
 
 // ============== JSON Helper Functions ==============
