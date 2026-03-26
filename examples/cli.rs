@@ -34,6 +34,11 @@ enum Commands {
         #[command(subcommand)]
         action: TodoAction,
     },
+    /// Journal operations
+    Journal {
+        #[command(subcommand)]
+        action: JournalAction,
+    },
     /// Category operations
     Category {
         #[command(subcommand)]
@@ -264,6 +269,66 @@ enum TodoAction {
         id: i64,
     },
     /// Delete a todo
+    Delete {
+        #[arg(long)]
+        id: i64,
+    },
+}
+
+#[derive(Subcommand)]
+enum JournalAction {
+    /// Create a new journal entry
+    Create {
+        #[arg(long)]
+        content: String,
+        #[arg(long)]
+        date: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        place: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        persons: Vec<String>,
+    },
+    /// Get a journal entry by ID
+    Get {
+        #[arg(long)]
+        id: i64,
+    },
+    /// List journal entries
+    List {
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        to: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+    },
+    /// Search journal entries (full-text search)
+    Search {
+        #[arg(long)]
+        query: String,
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Update a journal entry
+    Update {
+        #[arg(long)]
+        id: i64,
+        #[arg(long)]
+        content: Option<String>,
+        #[arg(long)]
+        date: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        place: Option<String>,
+    },
+    /// Delete a journal entry
     Delete {
         #[arg(long)]
         id: i64,
@@ -690,6 +755,143 @@ async fn main() -> anyhow::Result<()> {
             TodoAction::Delete { id } => {
                 let resp = tracker.handle(&logbook::Request {
                     tool: "delete_todo".into(),
+                    args: json!({"id": id}),
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+        },
+
+        Commands::Journal { action } => match action {
+            JournalAction::Create { content, date, category, place, tags, persons } => {
+                let mut args = json!({
+                    "content": content,
+                });
+                if let Some(d) = date { args["date"] = json!(d); }
+                if let Some(c) = category { args["category"] = json!(c); }
+                if let Some(p) = place { args["place"] = json!(p); }
+                if !tags.is_empty() { args["tags"] = json!(tags); }
+                if !persons.is_empty() { args["persons"] = json!(persons); }
+
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "create_journal".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            JournalAction::Get { id } => {
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "get_journal".into(),
+                    args: json!({"id": id}),
+                }).await;
+
+                if resp.success {
+                    if let Some(data) = resp.data {
+                        println!("{}", serde_json::to_string_pretty(&data)?);
+                    }
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            JournalAction::List { from, to, category } => {
+                let mut args = json!({});
+                if let Some(f) = from { args["from"] = json!(f); }
+                if let Some(t) = to { args["to"] = json!(t); }
+                if let Some(c) = category { args["category"] = json!(c); }
+
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "list_journals".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    if let Some(data) = resp.data {
+                        if let Some(arr) = data.as_array() {
+                            for item in arr {
+                                let id = item["id"].as_i64().unwrap_or(0);
+                                let date = item["date"].as_str().unwrap_or("-");
+                                let content = item["content"].as_str().unwrap_or("");
+                                let truncated = if content.len() > 50 {
+                                    format!("{}...", &content[..50])
+                                } else {
+                                    content.to_string()
+                                };
+                                println!("[{}] ({}) {}", id, date, truncated);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            JournalAction::Search { query, from, to } => {
+                let mut args = json!({
+                    "query": query,
+                });
+                if let Some(f) = from { args["from"] = json!(f); }
+                if let Some(t) = to { args["to"] = json!(t); }
+
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "search_journals".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    if let Some(data) = resp.data {
+                        if let Some(arr) = data.as_array() {
+                            for item in arr {
+                                let id = item["id"].as_i64().unwrap_or(0);
+                                let date = item["date"].as_str().unwrap_or("-");
+                                let content = item["content"].as_str().unwrap_or("");
+                                let truncated = if content.len() > 50 {
+                                    format!("{}...", &content[..50])
+                                } else {
+                                    content.to_string()
+                                };
+                                println!("[{}] ({}) {}", id, date, truncated);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            JournalAction::Update { id, content, date, category, place } => {
+                let mut args = json!({"id": id});
+                if let Some(c) = content { args["content"] = json!(c); }
+                if let Some(d) = date { args["date"] = json!(d); }
+                if let Some(c) = category { args["category"] = json!(c); }
+                if let Some(p) = place { args["place"] = json!(p); }
+
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "update_journal".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            JournalAction::Delete { id } => {
+                let resp = tracker.handle(&logbook::Request {
+                    tool: "delete_journal".into(),
                     args: json!({"id": id}),
                 }).await;
 

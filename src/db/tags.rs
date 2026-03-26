@@ -158,6 +158,42 @@ pub async fn get_todo_tags(pool: &SqlitePool, todo_id: i64) -> AppResult<Vec<Tag
     Ok(tags)
 }
 
+pub async fn set_journal_tags(pool: &SqlitePool, journal_id: i64, tag_ids: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM journal_tags WHERE journal_id = ?")
+        .bind(journal_id)
+        .execute(pool)
+        .await?;
+
+    for tag_id in tag_ids {
+        sqlx::query("INSERT INTO journal_tags (journal_id, tag_id) VALUES (?, ?)")
+            .bind(journal_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_journal_tags(pool: &SqlitePool, journal_id: i64) -> AppResult<Vec<Tag>> {
+    let rows = sqlx::query(
+        "SELECT t.id, t.name FROM tags t
+         INNER JOIN journal_tags jt ON t.id = jt.tag_id
+         WHERE jt.journal_id = ?"
+    )
+    .bind(journal_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut tags = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        tags.push(Tag { id: Some(id), name });
+    }
+    Ok(tags)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

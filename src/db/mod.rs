@@ -5,6 +5,7 @@ mod persons;
 mod transactions;
 mod activities;
 mod todos;
+mod journal;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -17,6 +18,7 @@ pub use persons::*;
 pub use transactions::*;
 pub use activities::*;
 pub use todos::*;
+pub use journal::*;
 
 pub async fn connect_db(db_path: Option<PathBuf>) -> AppResult<SqlitePool> {
     let path = if let Some(p) = db_path {
@@ -231,6 +233,92 @@ pub async fn init_tables(pool: &SqlitePool) -> AppResult<()> {
             FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
             FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
         );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Journal entries table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            date TEXT,
+            category_id INTEGER,
+            place_id INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (category_id) REFERENCES categories(id),
+            FOREIGN KEY (place_id) REFERENCES places(id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // FTS5 virtual table for journal search
+    sqlx::query(
+        r#"
+        CREATE VIRTUAL TABLE IF NOT EXISTS journal_fts USING fts5(
+            content,
+            tags,
+            persons,
+            content='journal_entries',
+            content_rowid='id'
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Journal-Tags junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS journal_tags (
+            journal_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (journal_id, tag_id),
+            FOREIGN KEY (journal_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Journal-Persons junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS journal_persons (
+            journal_id INTEGER NOT NULL,
+            person_id INTEGER NOT NULL,
+            PRIMARY KEY (journal_id, person_id),
+            FOREIGN KEY (journal_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Triggers for FTS5 sync
+    sqlx::query(
+        r#"
+        CREATE TRIGGER IF NOT EXISTS journal_ai AFTER INSERT ON journal_entries BEGIN
+            INSERT INTO journal_fts(rowid, content, tags, persons)
+            VALUES (new.id, new.content, '', '');
+        END;
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TRIGGER IF NOT EXISTS journal_ad AFTER DELETE ON journal_entries BEGIN
+            INSERT INTO journal_fts(journal_fts, rowid, content, tags, persons)
+            VALUES('delete', old.id, old.content, '', '');
+        END;
         "#,
     )
     .execute(pool)
