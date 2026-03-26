@@ -533,4 +533,54 @@ mod tests {
         // Cleanup
         let _ = std::fs::remove_file("test_command_custom.db");
     }
+
+    #[test]
+    fn test_logbook_command_search_transactions() {
+        // Create a transaction first
+        let create_cmd = c_string("transaction create --amount 75.0 --kind shopping --description Search test");
+        let response_ptr = unsafe { logbook_command(create_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(json["success"], true);
+        unsafe { logbook_response_free(response_ptr) };
+
+        // Search for it
+        let search_cmd = c_string("search transaction --kind shopping --limit 10");
+        let response_ptr = unsafe { logbook_command(search_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_search_todos() {
+        // Search pending todos
+        let search_cmd = c_string("search todo --status pending --limit 10");
+        let response_ptr = unsafe { logbook_command(search_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_search_with_order() {
+        // Search with ordering
+        let search_cmd = c_string("search transaction --limit 5 --order-by amount --order DESC");
+        let response_ptr = unsafe { logbook_command(search_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
 }
