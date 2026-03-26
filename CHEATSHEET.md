@@ -7,6 +7,123 @@ cargo run --example cli -- <domain> <action> [options]
 
 ---
 
+## 🔍 Unified Search Commands
+
+### Search Transactions
+```bash
+cargo run --example cli -- search transaction \
+  --kind shopping \
+  --limit 20 \
+  [--order-by amount] \
+  [--order DESC]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--kind` | ❌ | Filter by kind (e.g., `shopping`, `entertainment`) |
+| `--amount` | ❌ | Filter by amount |
+| `--category` | ❌ | Filter by category name |
+| `--place` | ❌ | Filter by place name |
+| `--limit` | ❌ | Max results (default: 100, max: 1000) |
+| `--offset` | ❌ | Skip N results (for pagination) |
+| `--order-by` | ❌ | Column to sort by |
+| `--order` | ❌ | Sort direction: `ASC` or `DESC` |
+
+---
+
+### Search Todos
+```bash
+cargo run --example cli -- search todo \
+  --status pending \
+  --priority high \
+  --limit 10 \
+  [--order-by due_date]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--status` | ❌ | Filter by status (`pending`, `in_progress`, `completed`) |
+| `--priority` | ❌ | Filter by priority (`high`, `medium`, `low`) |
+| `--description` | ❌ | Filter by description |
+| `--due-date` | ❌ | Filter by due date |
+| `--limit` | ❌ | Max results |
+| `--order-by` | ❌ | Column to sort by |
+
+---
+
+### Search Activities
+```bash
+cargo run --example cli -- search activity \
+  --description "Meeting" \
+  --limit 20
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--description` | ❌ | Filter by description |
+| `--start-time` | ❌ | Filter by start time |
+| `--category` | ❌ | Filter by category |
+| `--limit` | ❌ | Max results |
+
+---
+
+### Search Journal
+```bash
+cargo run --example cli -- search journal \
+  --date 2026-03-26 \
+  --limit 10
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--date` | ❌ | Filter by date |
+| `--category` | ❌ | Filter by category |
+| `--limit` | ❌ | Max results |
+
+---
+
+### Search Reference Data
+```bash
+# Search categories
+cargo run --example cli -- search category --name Food
+
+# Search places
+cargo run --example cli -- search place --name "Supermarket"
+
+# Search tags
+cargo run --example cli -- search tag --name urgent
+
+# Search persons
+cargo run --example cli -- search person --name "John"
+```
+
+---
+
+### Advanced Search Examples
+
+```bash
+# Find expensive shopping transactions
+cargo run --example cli -- search transaction \
+  --kind shopping \
+  --order-by amount \
+  --order DESC \
+  --limit 5
+
+# Find pending high-priority todos
+cargo run --example cli -- search todo \
+  --status pending \
+  --priority high \
+  --order-by due_date \
+  --limit 10
+
+# Paginated search (page 2)
+cargo run --example cli -- search transaction \
+  --limit 20 \
+  --offset 20
+```
+
+---
+
 ## 📝 Transaction Commands
 
 ### Create Transaction
