@@ -2,7 +2,7 @@ mod db;
 mod error;
 mod types;
 mod tracker;
-mod ffi;
+pub mod ffi;
 mod api;
 
 pub use error::{AppError, AppResult};
