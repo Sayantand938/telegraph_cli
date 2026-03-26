@@ -7,11 +7,11 @@
 //!   cargo run --example cli -- --domain activity --tool create --start "10:00" --stop "12:00" --activity-desc "Meeting"
 
 use clap::{Parser, Subcommand};
-use tx_tracker::Tracker;
+use logbook::Tracker;
 use serde_json::json;
 
 #[derive(Parser)]
-#[command(author, version, about = "tx_tracker CLI - For testing only")]
+#[command(author, version, about = "logbook CLI - For testing only")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -288,7 +288,7 @@ async fn main() -> anyhow::Result<()> {
                 if !tags.is_empty() { args["tags"] = json!(tags); }
                 if !persons.is_empty() { args["persons"] = json!(persons); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "create_transaction".into(),
                     args,
                 }).await;
@@ -301,7 +301,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TransactionAction::Get { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "get_transaction".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -320,7 +320,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(k) = kind { args["kind"] = json!(k); }
                 // Note: category/place filtering by ID would need lookup first
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_transactions".into(),
                     args,
                 }).await;
@@ -350,7 +350,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(c) = category { args["category"] = json!(c); }
                 if let Some(p) = place { args["place"] = json!(p); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "update_transaction".into(),
                     args,
                 }).await;
@@ -363,7 +363,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TransactionAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_transaction".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -389,7 +389,7 @@ async fn main() -> anyhow::Result<()> {
                 if !tags.is_empty() { args["tags"] = json!(tags); }
                 if !persons.is_empty() { args["persons"] = json!(persons); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "create_activity".into(),
                     args,
                 }).await;
@@ -402,7 +402,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             ActivityAction::Get { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "get_activity".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -417,7 +417,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             ActivityAction::List { category: _, place: _ } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_activities".into(),
                     args: json!({}),
                 }).await;
@@ -447,7 +447,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(c) = category { args["category"] = json!(c); }
                 if let Some(p) = place { args["place"] = json!(p); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "update_activity".into(),
                     args,
                 }).await;
@@ -460,7 +460,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             ActivityAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_activity".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -476,7 +476,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Category { action } => match action {
             CategoryAction::List => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_categories".into(),
                     args: json!({}),
                 }).await;
@@ -497,7 +497,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             CategoryAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_category".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -513,7 +513,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Place { action } => match action {
             PlaceAction::List => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_places".into(),
                     args: json!({}),
                 }).await;
@@ -534,7 +534,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             PlaceAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_place".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -550,7 +550,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Tag { action } => match action {
             TagAction::List => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_tags".into(),
                     args: json!({}),
                 }).await;
@@ -571,7 +571,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TagAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_tag".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -598,7 +598,7 @@ async fn main() -> anyhow::Result<()> {
                 if !tags.is_empty() { args["tags"] = json!(tags); }
                 if !persons.is_empty() { args["persons"] = json!(persons); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "create_todo".into(),
                     args,
                 }).await;
@@ -611,7 +611,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TodoAction::Get { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "get_todo".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -630,7 +630,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(s) = status { args["status"] = json!(s); }
                 if let Some(p) = priority { args["priority"] = json!(p); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_todos".into(),
                     args,
                 }).await;
@@ -662,7 +662,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(c) = category { args["category"] = json!(c); }
                 if let Some(p) = place { args["place"] = json!(p); }
 
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "update_todo".into(),
                     args,
                 }).await;
@@ -675,7 +675,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TodoAction::Complete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "complete_todo".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -688,7 +688,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             TodoAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_todo".into(),
                     args: json!({"id": id}),
                 }).await;
@@ -704,7 +704,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Person { action } => match action {
             PersonAction::List => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "list_persons".into(),
                     args: json!({}),
                 }).await;
@@ -725,7 +725,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             PersonAction::Delete { id } => {
-                let resp = tracker.handle(&tx_tracker::Request {
+                let resp = tracker.handle(&logbook::Request {
                     tool: "delete_person".into(),
                     args: json!({"id": id}),
                 }).await;

@@ -24,9 +24,9 @@ pub async fn connect_db(db_path: Option<PathBuf>) -> AppResult<SqlitePool> {
     } else {
         let data_dir = dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("telegraph_cli");
+            .join("logbook");
         std::fs::create_dir_all(&data_dir)?;
-        data_dir.join("tracker.db")
+        data_dir.join("logbook.db")
     };
 
     // Create empty db file if it doesn't exist

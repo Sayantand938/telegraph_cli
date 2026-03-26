@@ -1,8 +1,8 @@
-//! C-style FFI for tx_tracker - Thread-Safe Implementation
+//! C-style FFI for logbook - Thread-Safe Implementation
 //!
 //! This module provides a thread-safe C FFI interface.
 //! - Uses a multi-threaded Tokio runtime for async operations
-//! - TrackerHandle can be safely shared across threads
+//! - LogbookHandle can be safely shared across threads
 //! - Response strings are properly tracked and can be freed individually
 
 use crate::api::handle_json;
@@ -68,7 +68,7 @@ fn get_runtime() -> &'static tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .worker_threads(4)
-            .thread_name("tx_tracker-ffi")
+            .thread_name("logbook-ffi")
             .build()
             .unwrap()
     })
@@ -80,14 +80,14 @@ fn get_string_store() -> Arc<Mutex<StringStore>> {
         .clone()
 }
 
-/// Thread-safe tracker handle
+/// Thread-safe logbook handle
 /// Wrapped in Arc<Mutex<>> for safe concurrent access
-pub struct TrackerHandle {
+pub struct LogbookHandle {
     tracker: Arc<Mutex<Tracker>>,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn tracker_init(db_path: *const c_char) -> *mut TrackerHandle {
+pub extern "C" fn logbook_init(db_path: *const c_char) -> *mut LogbookHandle {
     let db_path_opt = if db_path.is_null() {
         None
     } else {
@@ -102,7 +102,7 @@ pub extern "C" fn tracker_init(db_path: *const c_char) -> *mut TrackerHandle {
     let rt = get_runtime();
     match rt.block_on(async {
         let tracker = Tracker::new(db_path_opt).await?;
-        Ok::<TrackerHandle, crate::AppError>(TrackerHandle { 
+        Ok::<LogbookHandle, crate::AppError>(LogbookHandle { 
             tracker: Arc::new(Mutex::new(tracker)) 
         })
     }) {
@@ -112,15 +112,15 @@ pub extern "C" fn tracker_init(db_path: *const c_char) -> *mut TrackerHandle {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tracker_free(handle: *mut TrackerHandle) {
+pub unsafe extern "C" fn logbook_free(handle: *mut LogbookHandle) {
     if !handle.is_null() {
         let _ = unsafe { Box::from_raw(handle) };
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tracker_request(
-    handle: *mut TrackerHandle,
+pub unsafe extern "C" fn logbook_request(
+    handle: *mut LogbookHandle,
     json_request: *const c_char,
 ) -> *const c_char {
     if handle.is_null() || json_request.is_null() {
@@ -164,7 +164,7 @@ pub unsafe extern "C" fn tracker_request(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tracker_response_free(response: *const c_char) {
+pub unsafe extern "C" fn logbook_response_free(response: *const c_char) {
     if !response.is_null() {
         let store = get_string_store();
         let mut store_guard = store.lock().unwrap();
@@ -173,7 +173,7 @@ pub unsafe extern "C" fn tracker_response_free(response: *const c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tracker_handle_json(
+pub unsafe extern "C" fn logbook_handle_json(
     json_request: *const c_char,
     db_path: *const c_char,
 ) -> *const c_char {
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn tracker_handle_json(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn tracker_version() -> *const c_char {
+pub extern "C" fn logbook_version() -> *const c_char {
     c"0.1.0".as_ptr()
 }
 
@@ -221,12 +221,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tracker_version_thread_safe() {
+    fn test_logbook_version_thread_safe() {
         let mut handles = vec![];
         
         for _ in 0..10 {
             let handle = thread::spawn(|| {
-                let version = tracker_version();
+                let version = logbook_version();
                 unsafe { CStr::from_ptr(version) }.to_str().unwrap().to_string()
             });
             handles.push(handle);
@@ -238,17 +238,17 @@ mod tests {
     }
 
     #[test]
-    fn test_tracker_init_thread_safe() {
+    fn test_logbook_init_thread_safe() {
         let mut handles = vec![];
         
         for i in 0..5 {
             let handle = thread::spawn(move || {
                 let db_path = c_string(&format!("test_thread_{}.db", i));
-                let ptr = tracker_init(db_path.as_ptr());
+                let ptr = logbook_init(db_path.as_ptr());
                 assert!(!ptr.is_null());
                 
                 // Clean up
-                unsafe { tracker_free(ptr) };
+                unsafe { logbook_free(ptr) };
                 let _ = std::fs::remove_file(format!("test_thread_{}.db", i));
             });
             handles.push(handle);
@@ -260,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tracker_request_concurrent() {
+    fn test_logbook_request_concurrent() {
         // Initialize separate trackers for each thread
         // This tests that the FFI runtime and string store are thread-safe
         let mut handles = vec![];
@@ -269,26 +269,26 @@ mod tests {
             let thread_handle = thread::spawn(move || {
                 // Each thread creates its own tracker
                 let db_path = c_string(&format!("test_concurrent_{}.db", i));
-                let handle = tracker_init(db_path.as_ptr());
+                let handle = logbook_init(db_path.as_ptr());
                 assert!(!handle.is_null());
-                
+
                 let request = c_string(&format!(
                     r#"{{"tool":"create_transaction","args":{{"amount":{},"kind":"concurrent_test","description":"Thread {}"}}}}"#,
                     10.0 + i as f64,
                     i
                 ));
-                
-                let response = unsafe { tracker_request(handle, request.as_ptr()) };
+
+                let response = unsafe { logbook_request(handle, request.as_ptr()) };
                 assert!(!response.is_null());
-                
+
                 let response_str = unsafe { CStr::from_ptr(response) }.to_str().unwrap();
                 assert!(response_str.contains("\"success\":true"));
-                
+
                 // Free the response
-                unsafe { tracker_response_free(response) };
+                unsafe { logbook_response_free(response) };
                 
                 // Clean up tracker
-                unsafe { tracker_free(handle) };
+                unsafe { logbook_free(handle) };
                 let _ = std::fs::remove_file(format!("test_concurrent_{}.db", i));
             });
             handles.push(thread_handle);
@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tracker_handle_json_concurrent() {
+    fn test_logbook_handle_json_concurrent() {
         let mut handles = vec![];
         
         for i in 0..5 {
@@ -311,14 +311,14 @@ mod tests {
                     i
                 ));
                 
-                let response = unsafe { tracker_handle_json(request.as_ptr(), ptr::null()) };
+                let response = unsafe { logbook_handle_json(request.as_ptr(), ptr::null()) };
                 assert!(!response.is_null());
                 
                 let response_str = unsafe { CStr::from_ptr(response) }.to_str().unwrap();
                 assert!(response_str.contains("\"success\":true"));
                 
                 // Free the response
-                unsafe { tracker_response_free(response) };
+                unsafe { logbook_response_free(response) };
             });
             handles.push(thread_handle);
         }

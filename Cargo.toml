@@ -1,10 +1,10 @@
 [package]
-name = "tx_tracker"
+name = "logbook"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "tx_tracker"
+name = "logbook"
 path = "src/lib.rs"
 crate-type = ["rlib", "cdylib"]
 

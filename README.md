@@ -1,4 +1,4 @@
-# tx_tracker
+# logbook
 
 A Rust library for tracking transactions and activities with SQLite storage. Provides both a native Rust API and a C-compatible FFI interface for integration with other languages.
 
@@ -19,7 +19,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tx_tracker = { path = "path/to/tx_tracker" }
+logbook = { path = "path/to/logbook" }
 ```
 
 ### Build the Library
@@ -37,7 +37,7 @@ cargo build --release --lib
 ### Rust API
 
 ```rust
-use tx_tracker::{Tracker, Request};
+use logbook::{Tracker, Request};
 use serde_json::json;
 
 #[tokio::main]
@@ -106,7 +106,7 @@ cargo run --example cli -- person list
 The library exposes a C-compatible FFI interface:
 
 ```c
-#include "tx_tracker.h"
+#include "logbook.h"
 
 // Get version
 const char* version = tracker_version();
@@ -131,12 +131,12 @@ tracker_free(handle);
 
 **Windows (MSVC):**
 ```bash
-cl test.c /Fe:test.exe /I include /link tx_tracker.lib
+cl test.c /Fe:test.exe /I include /link logbook.lib
 ```
 
 **Linux/macOS (GCC/Clang):**
 ```bash
-gcc test.c -o test -I include -L . -ltx_tracker -Wl,-rpath,.
+gcc test.c -o test -I include -L . -llogbook -Wl,-rpath,.
 ```
 
 ## Supported Tools/Operations
@@ -195,7 +195,7 @@ gcc test.c -o test -I include -L . -ltx_tracker -Wl,-rpath,.
 ## Project Structure
 
 ```
-tx_tracker/
+logbook/
 ├── src/
 │   ├── lib.rs          # Library entry point
 │   ├── api.rs          # Request/Response handling
@@ -208,7 +208,7 @@ tx_tracker/
 │   ├── cli.rs          # CLI for testing
 │   └── test_ffi.rs     # FFI test example
 ├── include/
-│   └── tx_tracker.h    # C header file
+│   └── logbook.h    # C header file
 └── Cargo.toml
 ```
 

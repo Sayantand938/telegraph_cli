@@ -1,4 +1,4 @@
-# tx_tracker CLI Cheatsheet
+# logbook CLI Cheatsheet
 
 Quick reference for all CLI commands. All commands use the format:
 ```bash
