@@ -267,6 +267,7 @@ pub unsafe extern "C" fn logbook_command(
 mod tests {
     use super::*;
     use std::thread;
+    use serde_json::Value;
 
     fn c_string(s: &str) -> CString {
         CString::new(s).unwrap()
@@ -384,7 +385,7 @@ mod tests {
     fn test_string_store_cleanup() {
         let store = get_string_store();
         let initial_count = store.lock().unwrap().strings.len();
-        
+
         // Store some strings
         let ptr1 = {
             let mut guard = store.lock().unwrap();
@@ -394,32 +395,142 @@ mod tests {
             let mut guard = store.lock().unwrap();
             guard.store("test2".to_string())
         };
-        
+
         {
             let guard = store.lock().unwrap();
             assert_eq!(guard.strings.len(), initial_count + 2);
         }
-        
+
         // Free one string
         {
             let mut guard = store.lock().unwrap();
             guard.free(ptr1);
         }
-        
+
         {
             let guard = store.lock().unwrap();
             assert_eq!(guard.strings.len(), initial_count + 1);
         }
-        
+
         // Free the other
         {
             let mut guard = store.lock().unwrap();
             guard.free(ptr2);
         }
-        
+
         {
             let guard = store.lock().unwrap();
             assert_eq!(guard.strings.len(), initial_count);
         }
+    }
+
+    #[test]
+    fn test_logbook_command_list_categories() {
+        let command = c_string("category list");
+        let response_ptr = unsafe { logbook_command(command.as_ptr(), ptr::null()) };
+        assert!(!response_ptr.is_null());
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_create_transaction() {
+        let command = c_string("transaction create --amount 99.99 --kind shopping --description FFI command test");
+        let response_ptr = unsafe { logbook_command(command.as_ptr(), ptr::null()) };
+        assert!(!response_ptr.is_null());
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert!(json["data"]["id"].is_number());
+        assert!(json["message"].as_str().unwrap().contains("created"));
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_list_transactions() {
+        let command = c_string("transaction list");
+        let response_ptr = unsafe { logbook_command(command.as_ptr(), ptr::null()) };
+        assert!(!response_ptr.is_null());
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_todo_list() {
+        // List todos
+        let list_cmd = c_string("todo list");
+        let response_ptr = unsafe { logbook_command(list_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_journal_crud() {
+        // Create a journal entry
+        let create_cmd = c_string("journal create --content 'FFI command interface test entry'");
+        let response_ptr = unsafe { logbook_command(create_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(json["success"], true);
+        unsafe { logbook_response_free(response_ptr) };
+
+        // List (not search, since FTS might need special setup)
+        let list_cmd = c_string("journal list");
+        let response_ptr = unsafe { logbook_command(list_cmd.as_ptr(), ptr::null()) };
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["data"].is_array());
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_invalid() {
+        let command = c_string("invalid command here");
+        let response_ptr = unsafe { logbook_command(command.as_ptr(), ptr::null()) };
+        assert!(!response_ptr.is_null());
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+
+        assert_eq!(json["success"], false);
+        assert!(json["error"].is_string());
+
+        unsafe { logbook_response_free(response_ptr) };
+    }
+
+    #[test]
+    fn test_logbook_command_with_custom_db() {
+        let db_path = c_string("test_command_custom.db");
+        let command = c_string("category list");
+        let response_ptr = unsafe { logbook_command(command.as_ptr(), db_path.as_ptr()) };
+        assert!(!response_ptr.is_null());
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }.to_str().unwrap();
+        let json: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(json["success"], true);
+
+        unsafe { logbook_response_free(response_ptr) };
+        
+        // Cleanup
+        let _ = std::fs::remove_file("test_command_custom.db");
     }
 }
