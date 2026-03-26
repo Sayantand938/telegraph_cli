@@ -3,6 +3,7 @@ mod transactions;
 mod activities;
 mod todos;
 mod journal;
+mod search;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -13,6 +14,7 @@ pub use transactions::process_transaction_request;
 pub use activities::process_activity_request;
 pub use todos::process_todo_request;
 pub use journal::process_journal_request;
+pub use search::{search_domain, SearchRequest};
 
 #[derive(Clone)]
 pub struct Tracker {

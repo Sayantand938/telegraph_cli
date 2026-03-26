@@ -90,6 +90,35 @@ impl Tracker {
 
     async fn process_request(&self, request: &Request) -> AppResult<(Option<serde_json::Value>, String)> {
         match request.tool.as_str() {
+            // Unified search operations
+            "search_transaction" | "search_transactions" |
+            "search_todo" | "search_todos" |
+            "search_activity" | "search_activities" |
+            "search_journal" | "search_journals" |
+            "search_category" | "search_categories" |
+            "search_place" | "search_places" |
+            "search_tag" | "search_tags" |
+            "search_person" | "search_persons" => {
+                // Extract domain from tool name
+                let domain = request.tool
+                    .trim_start_matches("search_")
+                    .trim_start_matches("search_")
+                    .to_string();
+                
+                // Parse search parameters from request args
+                let search_request = crate::tracker::SearchRequest {
+                    domain,
+                    filters: vec![], // Will be populated from args
+                    order_by: request.args["order_by"].as_str().map(String::from),
+                    order_direction: request.args["order"].as_str().unwrap_or("ASC").to_string(),
+                    limit: request.args["limit"].as_i64().unwrap_or(100),
+                    offset: request.args["offset"].as_i64(),
+                };
+                
+                let (data, message) = crate::tracker::search_domain(self.pool(), &search_request).await?;
+                Ok((Some(data), message))
+            }
+            
             // Category operations
             "list_categories" => {
                 let cats = db::list_categories(self.pool()).await?;
@@ -166,7 +195,6 @@ impl Tracker {
             "create_journal"
             | "get_journal"
             | "list_journals"
-            | "search_journals"
             | "update_journal"
             | "delete_journal" => {
                 process_journal_request(self.pool(), &request.tool, &request.args).await

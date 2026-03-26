@@ -78,6 +78,11 @@ fn parse_command<'a>(parts: &'a [&'a str]) -> AppResult<(&'a str, &'a str, Vec<&
 
 /// Build the tool name and args from parsed command
 fn build_request(domain: &str, action: &str, args: Vec<&str>) -> AppResult<(String, Value)> {
+    // Special handling for search command
+    if domain == "search" {
+        return build_search_request(action, args);
+    }
+    
     // Map domain to tool name (matching api.rs conventions)
     let tool = match (domain, action) {
         ("category" | "categories", "list") => "list_categories".to_string(),
@@ -110,6 +115,8 @@ fn build_request(domain: &str, action: &str, args: Vec<&str>) -> AppResult<(Stri
         ("journal" | "journals", "search") => "search_journals".to_string(),
         ("journal" | "journals", "update") => "update_journal".to_string(),
         ("journal" | "journals", "delete") => "delete_journal".to_string(),
+        // Search command - unified search across domains
+        ("search", _) => format!("search_{}", action),
         _ => format!("{}_{}", action, domain),
     };
     
@@ -221,7 +228,97 @@ mod tests {
     async fn test_execute_command_with_db() {
         let result = execute_command_with_db("category list", None).await;
         let parsed: Value = serde_json::from_str(&result).unwrap();
-        
+
         assert_eq!(parsed["success"], true);
     }
+}
+
+/// Build search request from command arguments
+fn build_search_request(domain: &str, args: Vec<&str>) -> AppResult<(String, Value)> {
+    let mut args_map = serde_json::Map::new();
+    
+    // Parse arguments
+    let mut i = 0;
+    while i < args.len() {
+        if !args[i].starts_with("--") {
+            i += 1;
+            continue;
+        }
+        
+        let key = args[i].trim_start_matches("--");
+        let value = if i + 1 < args.len() && !args[i + 1].starts_with("--") {
+            i += 1;
+            args[i]
+        } else {
+            "true"
+        };
+        
+        match key {
+            "where" => {
+                // Parse WHERE clause and add individual filters
+                let filters = parse_where_to_json(value)?;
+                args_map.insert("filters".to_string(), filters);
+            }
+            "order-by" | "order_by" => {
+                args_map.insert("order_by".to_string(), json!(value));
+            }
+            "order" => {
+                args_map.insert("order".to_string(), json!(value));
+            }
+            "limit" => {
+                args_map.insert("limit".to_string(), json!(value.parse::<i64>().unwrap_or(100)));
+            }
+            "offset" => {
+                args_map.insert("offset".to_string(), json!(value.parse::<i64>().unwrap_or(0)));
+            }
+            // Dynamic filter - treat as column = value
+            _ => {
+                let column = key.replace("-", "_");
+                args_map.insert(column, json!(value));
+            }
+        }
+        i += 1;
+    }
+    
+    let tool = format!("search_{}", domain);
+    Ok((tool, Value::Object(args_map)))
+}
+
+/// Parse WHERE clause to JSON array
+fn parse_where_to_json(clause: &str) -> AppResult<Value> {
+    let mut filters = serde_json::Map::new();
+    
+    // Split by AND
+    for condition in clause.split(" AND ") {
+        let condition = condition.trim();
+        
+        // Parse operator
+        if let Some(idx) = condition.find("!=") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+2..].trim().trim_matches('\'');
+            filters.insert(col.to_string(), json!(val));
+        } else if let Some(idx) = condition.find(">=") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+2..].trim().trim_matches('\'');
+            filters.insert(format!("{}_gte", col), json!(val));
+        } else if let Some(idx) = condition.find("<=") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+2..].trim().trim_matches('\'');
+            filters.insert(format!("{}_lte", col), json!(val));
+        } else if let Some(idx) = condition.find(">") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+1..].trim().trim_matches('\'');
+            filters.insert(format!("{}_gt", col), json!(val));
+        } else if let Some(idx) = condition.find("<") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+1..].trim().trim_matches('\'');
+            filters.insert(format!("{}_lt", col), json!(val));
+        } else if let Some(idx) = condition.find("=") {
+            let col = condition[..idx].trim();
+            let val = condition[idx+1..].trim().trim_matches('\'');
+            filters.insert(col.to_string(), json!(val));
+        }
+    }
+    
+    Ok(Value::Object(filters))
 }
