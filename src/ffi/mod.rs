@@ -7,6 +7,7 @@
 
 use crate::api::handle_json;
 use crate::tracker::Tracker;
+use crate::command::execute_command_with_db;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -209,6 +210,57 @@ pub unsafe extern "C" fn logbook_handle_json(
 #[unsafe(no_mangle)]
 pub extern "C" fn logbook_version() -> *const c_char {
     c"0.1.0".as_ptr()
+}
+
+/// Execute a simple command string (Flutter-friendly interface).
+///
+/// This is a convenience function that accepts a simple command string
+/// instead of JSON. Perfect for Flutter/mobile apps.
+///
+/// Format: "<domain> <action> [--arg value...]"
+///
+/// Examples:
+///   "transaction create --amount 50.0 --kind shopping --desc Groceries"
+///   "todo list --status pending"
+///   "journal search --query meeting"
+///   "category list"
+///
+/// @param command Command string (null-terminated).
+/// @param db_path Path to database file, or NULL for default location.
+/// @return JSON response string (caller must free with logbook_response_free),
+///         or NULL on error.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn logbook_command(
+    command: *const c_char,
+    db_path: *const c_char,
+) -> *const c_char {
+    if command.is_null() {
+        return ptr::null();
+    }
+
+    let command_str = match unsafe { CStr::from_ptr(command) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null(),
+    };
+
+    let db_path_opt = if db_path.is_null() {
+        None
+    } else {
+        match unsafe { CStr::from_ptr(db_path) }.to_str() {
+            Ok(s) => Some(PathBuf::from(s.to_string())),
+            Err(_) => return ptr::null(),
+        }
+    };
+
+    let rt = get_runtime();
+    let command_str = command_str.to_string();
+    let response_json = rt.block_on(async move {
+        execute_command_with_db(&command_str, db_path_opt.as_deref().map(|p| p.to_str()).flatten()).await
+    });
+
+    let store = get_string_store();
+    let mut store_guard = store.lock().unwrap();
+    store_guard.store(response_json)
 }
 
 #[cfg(test)]
