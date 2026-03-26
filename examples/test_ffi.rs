@@ -17,10 +17,8 @@ fn main() {
 
     // Test 1: Version
     println!("=== Test 1: Version ===");
-    unsafe {
-        let version = tracker_version();
-        println!("Version: {}", c_str_to_string(version));
-    }
+    let version = tracker_version();
+    println!("Version: {}", c_str_to_string(version));
     println!();
 
     // Test 2: Handle-based API

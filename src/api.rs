@@ -186,3 +186,301 @@ pub async fn handle_json(json_request: &str, db_path: Option<std::path::PathBuf>
         Err(e) => format!(r#"{{"success":false,"error":"{}"}}"#, e),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use crate::error::AppError;
+
+    // ============== Request Tests ==============
+
+    #[test]
+    fn test_request_serialization() {
+        let request = Request {
+            tool: "create_transaction".to_string(),
+            args: json!({"amount": 50.0, "kind": "shopping"}),
+        };
+        let serialized = serde_json::to_string(&request).unwrap();
+        assert!(serialized.contains("create_transaction"));
+        assert!(serialized.contains("amount"));
+
+        let deserialized: Request = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.tool, "create_transaction");
+    }
+
+    #[test]
+    fn test_request_deserialization() {
+        let json_str = r#"{"tool": "list_transactions", "args": {"kind": "shopping"}}"#;
+        let request: Request = serde_json::from_str(json_str).unwrap();
+        assert_eq!(request.tool, "list_transactions");
+        assert_eq!(request.args["kind"], "shopping");
+    }
+
+    // ============== Response Tests ==============
+
+    #[test]
+    fn test_response_success() {
+        let response = Response::success(Some(json!({"id": 1})), "Created successfully");
+        assert!(response.success);
+        assert_eq!(response.data, Some(json!({"id": 1})));
+        assert_eq!(response.message, Some("Created successfully".to_string()));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_response_success_no_data() {
+        let response = Response::success(None, "Deleted successfully");
+        assert!(response.success);
+        assert!(response.data.is_none());
+        assert_eq!(response.message, Some("Deleted successfully".to_string()));
+    }
+
+    #[test]
+    fn test_response_error() {
+        let response = Response::error("Something went wrong");
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert_eq!(response.error, Some("Something went wrong".to_string()));
+        assert!(response.message.is_none());
+    }
+
+    #[test]
+    fn test_response_serialization() {
+        let response = Response::success(Some(json!({"id": 1})), "OK");
+        let serialized = serde_json::to_string(&response).unwrap();
+        assert!(serialized.contains("\"success\":true"));
+        assert!(serialized.contains("\"id\":1"));
+
+        let deserialized: Response = serde_json::from_str(&serialized).unwrap();
+        assert!(deserialized.success);
+    }
+
+    // ============== GetIdArgs Tests ==============
+
+    #[test]
+    fn test_get_id_args_serialization() {
+        let args = GetIdArgs { id: 42 };
+        let serialized = serde_json::to_string(&args).unwrap();
+        assert_eq!(serialized, r#"{"id":42}"#);
+
+        let deserialized: GetIdArgs = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.id, 42);
+    }
+
+    // ============== ListTransactionsArgs Tests ==============
+
+    #[test]
+    fn test_list_transactions_args_default() {
+        let args = ListTransactionsArgs::default();
+        assert!(args.kind.is_none());
+        assert!(args.category_id.is_none());
+        assert!(args.place_id.is_none());
+    }
+
+    #[test]
+    fn test_list_transactions_args_serialization() {
+        let args = ListTransactionsArgs {
+            kind: Some("shopping".to_string()),
+            category_id: Some(1),
+            place_id: None,
+        };
+        let serialized = serde_json::to_string(&args).unwrap();
+        assert!(serialized.contains("shopping"));
+        assert!(serialized.contains("1"));
+    }
+
+    // ============== ListActivitiesArgs Tests ==============
+
+    #[test]
+    fn test_list_activities_args_default() {
+        let args = ListActivitiesArgs::default();
+        assert!(args.category_id.is_none());
+        assert!(args.place_id.is_none());
+    }
+
+    #[test]
+    fn test_list_activities_args_serialization() {
+        let args = ListActivitiesArgs {
+            category_id: Some(2),
+            place_id: Some(3),
+        };
+        let serialized = serde_json::to_string(&args).unwrap();
+        assert!(serialized.contains("2"));
+        assert!(serialized.contains("3"));
+    }
+
+    // ============== UpdateTransactionArgs Tests ==============
+
+    #[test]
+    fn test_update_transaction_args_serialization() {
+        let args = UpdateTransactionArgs {
+            id: 1,
+            amount: Some(100.0),
+            kind: None,
+            description: Some("Updated".to_string()),
+            category_id: None,
+            place_id: None,
+            category_name: None,
+            place_name: None,
+        };
+        let serialized = serde_json::to_string(&args).unwrap();
+        assert!(serialized.contains("\"id\":1"));
+        assert!(serialized.contains("100.0"));
+        assert!(serialized.contains("Updated"));
+    }
+
+    #[test]
+    fn test_update_transaction_args_with_renames() {
+        let args = UpdateTransactionArgs {
+            id: 1,
+            amount: None,
+            kind: None,
+            description: None,
+            category_id: None,
+            place_id: None,
+            category_name: Some("Food".to_string()),
+            place_name: Some("Store".to_string()),
+        };
+        let serialized = serde_json::to_string(&args).unwrap();
+        // Check that the renamed fields use the renamed keys
+        assert!(serialized.contains("\"category\""));
+        assert!(serialized.contains("\"place\""));
+        assert!(serialized.contains("Food"));
+        assert!(serialized.contains("Store"));
+    }
+
+    // ============== UpdateActivityArgs Tests ==============
+
+    #[test]
+    fn test_update_activity_args_serialization() {
+        let args = UpdateActivityArgs {
+            id: 1,
+            start_time: Some("09:00".to_string()),
+            stop_time: Some("10:00".to_string()),
+            description: None,
+            category_id: None,
+            place_id: None,
+            category_name: None,
+            place_name: None,
+        };
+        let serialized = serde_json::to_string(&args).unwrap();
+        assert!(serialized.contains("09:00"));
+        assert!(serialized.contains("10:00"));
+    }
+
+    // ============== parse_request Tests ==============
+
+    #[test]
+    fn test_parse_request_valid() {
+        let json_str = r#"{"tool": "list_categories", "args": {}}"#;
+        let result = parse_request(json_str);
+        assert!(result.is_ok());
+        let request = result.unwrap();
+        assert_eq!(request.tool, "list_categories");
+    }
+
+    #[test]
+    fn test_parse_request_invalid_json() {
+        let json_str = r#"{"tool": invalid}"#;
+        let result = parse_request(json_str);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::JsonError(_)));
+    }
+
+    #[test]
+    fn test_parse_request_missing_args() {
+        // args field is required, but serde will accept null
+        let json_str = r#"{"tool": "test", "args": null}"#;
+        let result = parse_request(json_str);
+        assert!(result.is_ok());
+    }
+
+    // ============== to_json Tests ==============
+
+    #[test]
+    fn test_to_json() {
+        let value = json!({"key": "value", "num": 42});
+        let result = to_json(&value);
+        assert!(result.is_ok());
+        let json_str = result.unwrap();
+        assert!(json_str.contains("key"));
+        assert!(json_str.contains("value"));
+    }
+
+    #[test]
+    fn test_to_json_pretty() {
+        let value = json!({"key": "value"});
+        let result = to_json_pretty(&value);
+        assert!(result.is_ok());
+        let json_str = result.unwrap();
+        // Pretty print should have newlines/indentation
+        assert!(json_str.contains('\n') || json_str.contains("  "));
+    }
+
+    // ============== handle_json Tests ==============
+
+    #[tokio::test]
+    async fn test_handle_json_list_categories() {
+        let request = r#"{"tool": "list_categories", "args": {}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("category"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_list_places() {
+        let request = r#"{"tool": "list_places", "args": {}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("place"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_list_tags() {
+        let request = r#"{"tool": "list_tags", "args": {}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("tag"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_list_persons() {
+        let request = r#"{"tool": "list_persons", "args": {}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("person"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_invalid_tool() {
+        let request = r#"{"tool": "unknown_tool", "args": {}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":false"));
+        assert!(response.contains("error"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_invalid_json() {
+        let request = r#"{"tool": invalid}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":false"));
+        assert!(response.contains("error"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_create_transaction() {
+        let request = r#"{"tool": "create_transaction", "args": {"amount": 25.0, "kind": "test", "description": "Unit test transaction"}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("\"id\""));
+    }
+
+    #[tokio::test]
+    async fn test_handle_json_create_activity() {
+        let request = r#"{"tool": "create_activity", "args": {"start_time": "09:00", "stop_time": "10:00", "description": "Unit test activity"}}"#;
+        let response = handle_json(request, None).await;
+        assert!(response.contains("\"success\":true"));
+        assert!(response.contains("\"id\""));
+    }
+}

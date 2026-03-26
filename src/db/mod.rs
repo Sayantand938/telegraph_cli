@@ -185,3 +185,60 @@ pub async fn init_tables(pool: &SqlitePool) -> AppResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Create an in-memory database for testing
+    async fn create_test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .unwrap();
+        init_tables(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_connect_db_custom_path() {
+        let temp_path = std::env::temp_dir().join(format!("tx_tracker_custom_test_{}.db", std::process::id()));
+        let result = connect_db(Some(temp_path.clone())).await;
+        assert!(result.is_ok());
+        assert!(temp_path.exists());
+        // Cleanup
+        let _ = std::fs::remove_file(temp_path);
+    }
+
+    #[tokio::test]
+    async fn test_init_tables_idempotent() {
+        let pool = create_test_pool().await;
+        
+        // Call init_tables again - should not fail
+        let result = init_tables(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_init_tables_creates_all_tables() {
+        let pool = create_test_pool().await;
+        
+        // Check all tables exist
+        let tables = [
+            "categories", "places", "tags", "persons",
+            "transaction_tags", "activity_tags",
+            "transaction_persons", "activity_persons",
+            "transactions", "activities",
+        ];
+        
+        for table in &tables {
+            let result: (i64,) = sqlx::query_as(&format!(
+                "SELECT COUNT(*) FROM {}",
+                table
+            ))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(result.0, 0); // Should be empty but exist
+        }
+    }
+}

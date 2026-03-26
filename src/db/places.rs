@@ -49,3 +49,53 @@ pub async fn delete_place(pool: &SqlitePool, id: i64) -> AppResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::init_tables;
+
+    async fn create_test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        init_tables(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_upsert_place_new() {
+        let pool = create_test_pool().await;
+        let id = upsert_place(&pool, "Test Place").await.unwrap();
+        assert!(id > 0);
+    }
+
+    #[tokio::test]
+    async fn test_upsert_place_duplicate() {
+        let pool = create_test_pool().await;
+        let id1 = upsert_place(&pool, "Duplicate").await.unwrap();
+        let id2 = upsert_place(&pool, "Duplicate").await.unwrap();
+        assert_eq!(id1, id2);
+    }
+
+    #[tokio::test]
+    async fn test_list_places_sorted() {
+        let pool = create_test_pool().await;
+        upsert_place(&pool, "Zoo").await.unwrap();
+        upsert_place(&pool, "Airport").await.unwrap();
+        upsert_place(&pool, "Mall").await.unwrap();
+        
+        let places = list_places(&pool).await.unwrap();
+        assert_eq!(places.len(), 3);
+        assert_eq!(places[0].name, "Airport");
+        assert_eq!(places[1].name, "Mall");
+        assert_eq!(places[2].name, "Zoo");
+    }
+
+    #[tokio::test]
+    async fn test_delete_place() {
+        let pool = create_test_pool().await;
+        let id = upsert_place(&pool, "To Delete").await.unwrap();
+        delete_place(&pool, id).await.unwrap();
+        let places = list_places(&pool).await.unwrap();
+        assert!(places.is_empty());
+    }
+}

@@ -193,3 +193,93 @@ pub async fn delete_activity(pool: &SqlitePool, id: i64) -> AppResult<()> {
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{init_tables, upsert_category, upsert_place};
+
+    async fn create_test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        init_tables(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_add_activity_basic() {
+        let pool = create_test_pool().await;
+        let id = add_activity(&pool, "09:00", "10:00", "Test activity", None, None).await.unwrap();
+        assert!(id > 0);
+    }
+
+    #[tokio::test]
+    async fn test_add_activity_with_category() {
+        let pool = create_test_pool().await;
+        let cat_id = upsert_category(&pool, "Work").await.unwrap();
+        let activity_id = add_activity(&pool, "09:00", "17:00", "Work day", Some(cat_id), None).await.unwrap();
+        
+        let activity = get_activity(&pool, activity_id).await.unwrap().unwrap();
+        assert_eq!(activity.category_id, Some(cat_id));
+    }
+
+    #[tokio::test]
+    async fn test_add_activity_with_place() {
+        let pool = create_test_pool().await;
+        let place_id = upsert_place(&pool, "Office").await.unwrap();
+        let activity_id = add_activity(&pool, "09:00", "17:00", "Work day", None, Some(place_id)).await.unwrap();
+        
+        let activity = get_activity(&pool, activity_id).await.unwrap().unwrap();
+        assert_eq!(activity.place_id, Some(place_id));
+    }
+
+    #[tokio::test]
+    async fn test_get_activity_not_found() {
+        let pool = create_test_pool().await;
+        let result = get_activity(&pool, 999).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_activities_all() {
+        let pool = create_test_pool().await;
+        add_activity(&pool, "09:00", "10:00", "First", None, None).await.unwrap();
+        add_activity(&pool, "11:00", "12:00", "Second", None, None).await.unwrap();
+        add_activity(&pool, "14:00", "15:00", "Third", None, None).await.unwrap();
+        
+        let activities = list_activities(&pool, None, None).await.unwrap();
+        assert_eq!(activities.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_update_activity_times() {
+        let pool = create_test_pool().await;
+        let id = add_activity(&pool, "09:00", "10:00", "Original", None, None).await.unwrap();
+        
+        update_activity(&pool, id, Some("10:00"), Some("11:00"), None, None, None).await.unwrap();
+        
+        let activity = get_activity(&pool, id).await.unwrap().unwrap();
+        assert_eq!(activity.start_time, "10:00");
+        assert_eq!(activity.stop_time, "11:00");
+    }
+
+    #[tokio::test]
+    async fn test_update_activity_no_fields() {
+        let pool = create_test_pool().await;
+        let id = add_activity(&pool, "09:00", "10:00", "Original", None, None).await.unwrap();
+        
+        let result = update_activity(&pool, id, None, None, None, None, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Nothing to update"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_activity() {
+        let pool = create_test_pool().await;
+        let id = add_activity(&pool, "09:00", "10:00", "To Delete", None, None).await.unwrap();
+        
+        delete_activity(&pool, id).await.unwrap();
+        
+        let activity = get_activity(&pool, id).await.unwrap();
+        assert!(activity.is_none());
+    }
+}

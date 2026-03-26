@@ -222,3 +222,106 @@ pub async fn delete_transaction(pool: &SqlitePool, id: i64) -> AppResult<()> {
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{init_tables, upsert_category, upsert_place};
+
+    async fn create_test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        init_tables(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_add_transaction_basic() {
+        let pool = create_test_pool().await;
+        let id = add_transaction(&pool, 100.0, "shopping", "Test purchase", None, None).await.unwrap();
+        assert!(id > 0);
+    }
+
+    #[tokio::test]
+    async fn test_add_transaction_with_category() {
+        let pool = create_test_pool().await;
+        let cat_id = upsert_category(&pool, "Food").await.unwrap();
+        let tx_id = add_transaction(&pool, 50.0, "shopping", "Groceries", Some(cat_id), None).await.unwrap();
+        
+        let tx = get_transaction(&pool, tx_id).await.unwrap().unwrap();
+        assert_eq!(tx.category_id, Some(cat_id));
+    }
+
+    #[tokio::test]
+    async fn test_add_transaction_with_place() {
+        let pool = create_test_pool().await;
+        let place_id = upsert_place(&pool, "Supermarket").await.unwrap();
+        let tx_id = add_transaction(&pool, 75.0, "shopping", "Groceries", None, Some(place_id)).await.unwrap();
+        
+        let tx = get_transaction(&pool, tx_id).await.unwrap().unwrap();
+        assert_eq!(tx.place_id, Some(place_id));
+    }
+
+    #[tokio::test]
+    async fn test_get_transaction_not_found() {
+        let pool = create_test_pool().await;
+        let result = get_transaction(&pool, 999).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_transactions_all() {
+        let pool = create_test_pool().await;
+        add_transaction(&pool, 10.0, "test", "First", None, None).await.unwrap();
+        add_transaction(&pool, 20.0, "test", "Second", None, None).await.unwrap();
+        add_transaction(&pool, 30.0, "other", "Third", None, None).await.unwrap();
+        
+        let transactions = list_transactions(&pool, None, None, None).await.unwrap();
+        assert_eq!(transactions.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_list_transactions_by_kind() {
+        let pool = create_test_pool().await;
+        add_transaction(&pool, 10.0, "shopping", "First", None, None).await.unwrap();
+        add_transaction(&pool, 20.0, "entertainment", "Second", None, None).await.unwrap();
+        add_transaction(&pool, 30.0, "shopping", "Third", None, None).await.unwrap();
+        
+        let transactions = list_transactions(&pool, Some("shopping"), None, None).await.unwrap();
+        assert_eq!(transactions.len(), 2);
+        for tx in &transactions {
+            assert_eq!(tx.kind, "shopping");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_transaction_amount() {
+        let pool = create_test_pool().await;
+        let id = add_transaction(&pool, 100.0, "test", "Original", None, None).await.unwrap();
+        
+        update_transaction(&pool, id, Some(200.0), None, None, None, None).await.unwrap();
+        
+        let tx = get_transaction(&pool, id).await.unwrap().unwrap();
+        assert_eq!(tx.amount, 200.0);
+    }
+
+    #[tokio::test]
+    async fn test_update_transaction_no_fields() {
+        let pool = create_test_pool().await;
+        let id = add_transaction(&pool, 100.0, "test", "Original", None, None).await.unwrap();
+        
+        let result = update_transaction(&pool, id, None, None, None, None, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Nothing to update"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_transaction() {
+        let pool = create_test_pool().await;
+        let id = add_transaction(&pool, 100.0, "test", "To Delete", None, None).await.unwrap();
+        
+        delete_transaction(&pool, id).await.unwrap();
+        
+        let tx = get_transaction(&pool, id).await.unwrap();
+        assert!(tx.is_none());
+    }
+}
