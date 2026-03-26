@@ -13,11 +13,11 @@ pub struct Todo {
     pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
-    #[serde(rename = "place", default)]
+    #[serde(rename = "location", default)]
     pub place_name: Option<String>,
     #[serde(rename = "tags", default)]
     pub tag_names: Vec<String>,
-    #[serde(rename = "persons", default)]
+    #[serde(rename = "people", default)]
     pub person_names: Vec<String>,
 }
 
@@ -68,9 +68,9 @@ mod tests {
         assert!(serialized.contains("2026-03-30"));
         // Check renamed fields
         assert!(serialized.contains("\"category\""));
-        assert!(serialized.contains("\"place\""));
+        assert!(serialized.contains("\"location\""));
         assert!(serialized.contains("\"tags\""));
-        assert!(serialized.contains("\"persons\""));
+        assert!(serialized.contains("\"people\""));
     }
 
     #[test]
@@ -86,9 +86,9 @@ mod tests {
             "category_id": 2,
             "place_id": null,
             "category": "Work",
-            "place": null,
+            "location": null,
             "tags": ["project", "deadline"],
-            "persons": ["Alice", "Bob"]
+            "people": ["Alice", "Bob"]
         });
 
         let todo: Todo = serde_json::from_value(json).unwrap();

@@ -65,53 +65,53 @@ enum Commands {
 enum TransactionAction {
     /// Create a new transaction
     Create {
-        #[arg(long)]
+        #[arg(short = 'a', long)]
         amount: f64,
-        #[arg(long)]
+        #[arg(short = 'k', long)]
         kind: String,
-        #[arg(long, default_value = "")]
+        #[arg(short = 'd', long, default_value = "")]
         desc: String,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
+        #[arg(long, visible_alias = "tag")]
         tags: Vec<String>,
-        #[arg(long, value_delimiter = ',')]
-        persons: Vec<String>,
+        #[arg(long, visible_alias = "person")]
+        people: Vec<String>,
     },
     /// Get a transaction by ID
     Get {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
     /// List transactions
     List {
-        #[arg(long)]
+        #[arg(short = 'k', long)]
         kind: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Update a transaction
     Update {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
-        #[arg(long)]
+        #[arg(short = 'a', long)]
         amount: Option<f64>,
-        #[arg(long)]
+        #[arg(short = 'k', long)]
         kind: Option<String>,
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         desc: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Delete a transaction
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -124,47 +124,47 @@ enum ActivityAction {
         start: String,
         #[arg(long)]
         stop: String,
-        #[arg(long, default_value = "")]
+        #[arg(short = 'd', long, default_value = "")]
         desc: String,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
+        #[arg(long, visible_alias = "tag")]
         tags: Vec<String>,
-        #[arg(long, value_delimiter = ',')]
-        persons: Vec<String>,
+        #[arg(long, visible_alias = "person")]
+        people: Vec<String>,
     },
     /// Get an activity by ID
     Get {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
     /// List activities
     List {
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Update an activity
     Update {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
         #[arg(long)]
         start: Option<String>,
         #[arg(long)]
         stop: Option<String>,
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         desc: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Delete an activity
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -175,7 +175,7 @@ enum CategoryAction {
     List,
     /// Delete a category
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -186,7 +186,7 @@ enum PlaceAction {
     List,
     /// Delete a place
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -197,7 +197,7 @@ enum TagAction {
     List,
     /// Delete a tag
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -208,7 +208,7 @@ enum PersonAction {
     List,
     /// Delete a person
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -217,60 +217,60 @@ enum PersonAction {
 enum TodoAction {
     /// Create a new todo
     Create {
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         desc: String,
         #[arg(long, default_value = "pending")]
         status: String,
-        #[arg(long)]
+        #[arg(long, visible_alias = "prio")]
         priority: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "due")]
         due_date: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
+        #[arg(long, visible_alias = "tag")]
         tags: Vec<String>,
-        #[arg(long, value_delimiter = ',')]
-        persons: Vec<String>,
+        #[arg(long, visible_alias = "person")]
+        people: Vec<String>,
     },
     /// Get a todo by ID
     Get {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
     /// List todos
     List {
         #[arg(long)]
         status: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "prio")]
         priority: Option<String>,
     },
     /// Update a todo
     Update {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         desc: Option<String>,
         #[arg(long)]
         status: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "prio")]
         priority: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "due")]
         due_date: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Complete a todo
     Complete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
     /// Delete a todo
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -281,56 +281,56 @@ enum JournalAction {
     Create {
         #[arg(long)]
         content: String,
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         date: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
+        #[arg(long, visible_alias = "tag")]
         tags: Vec<String>,
-        #[arg(long, value_delimiter = ',')]
-        persons: Vec<String>,
+        #[arg(long, visible_alias = "person")]
+        people: Vec<String>,
     },
     /// Get a journal entry by ID
     Get {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
     /// List journal entries
     List {
-        #[arg(long)]
+        #[arg(long, visible_alias = "from")]
         from: Option<String>,
         #[arg(long)]
         to: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
     },
     /// Search journal entries (full-text search)
     Search {
-        #[arg(long)]
+        #[arg(short = 'q', long)]
         query: String,
-        #[arg(long)]
+        #[arg(long, visible_alias = "from")]
         from: Option<String>,
         #[arg(long)]
         to: Option<String>,
     },
     /// Update a journal entry
     Update {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
         #[arg(long)]
         content: Option<String>,
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         date: Option<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "cat")]
         category: Option<String>,
-        #[arg(long)]
-        place: Option<String>,
+        #[arg(long, visible_alias = "loc")]
+        location: Option<String>,
     },
     /// Delete a journal entry
     Delete {
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         id: i64,
     },
 }
@@ -342,16 +342,16 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Transaction { action } => match action {
-            TransactionAction::Create { amount, kind, desc, category, place, tags, persons } => {
+            TransactionAction::Create { amount, kind, desc, category, location, tags, people } => {
                 let mut args = json!({
                     "amount": amount,
                     "kind": kind,
                     "description": desc
                 });
                 if let Some(cat) = category { args["category"] = json!(cat); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
                 if !tags.is_empty() { args["tags"] = json!(tags); }
-                if !persons.is_empty() { args["persons"] = json!(persons); }
+                if !people.is_empty() { args["people"] = json!(people); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "create_transaction".into(),
@@ -380,10 +380,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            TransactionAction::List { kind, category: _, place: _ } => {
+            TransactionAction::List { kind, category: _, location: _ } => {
                 let mut args = json!({});
                 if let Some(k) = kind { args["kind"] = json!(k); }
-                // Note: category/place filtering by ID would need lookup first
+                // Note: category/location filtering by ID would need lookup first
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "list_transactions".into(),
@@ -407,13 +407,13 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            TransactionAction::Update { id, amount, kind, desc, category, place } => {
+            TransactionAction::Update { id, amount, kind, desc, category, location } => {
                 let mut args = json!({"id": id});
                 if let Some(a) = amount { args["amount"] = json!(a); }
                 if let Some(k) = kind { args["kind"] = json!(k); }
                 if let Some(d) = desc { args["description"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "update_transaction".into(),
@@ -443,16 +443,16 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Activity { action } => match action {
-            ActivityAction::Create { start, stop, desc, category, place, tags, persons } => {
+            ActivityAction::Create { start, stop, desc, category, location, tags, people } => {
                 let mut args = json!({
                     "start_time": start,
                     "stop_time": stop,
                     "description": desc
                 });
                 if let Some(cat) = category { args["category"] = json!(cat); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
                 if !tags.is_empty() { args["tags"] = json!(tags); }
-                if !persons.is_empty() { args["persons"] = json!(persons); }
+                if !people.is_empty() { args["people"] = json!(people); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "create_activity".into(),
@@ -481,7 +481,7 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            ActivityAction::List { category: _, place: _ } => {
+            ActivityAction::List { category: _, location: _ } => {
                 let resp = tracker.handle(&logbook::Request {
                     tool: "list_activities".into(),
                     args: json!({}),
@@ -504,13 +504,13 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            ActivityAction::Update { id, start, stop, desc, category, place } => {
+            ActivityAction::Update { id, start, stop, desc, category, location } => {
                 let mut args = json!({"id": id});
                 if let Some(s) = start { args["start_time"] = json!(s); }
                 if let Some(s) = stop { args["stop_time"] = json!(s); }
                 if let Some(d) = desc { args["description"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "update_activity".into(),
@@ -651,7 +651,7 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Todo { action } => match action {
-            TodoAction::Create { desc, status, priority, due_date, category, place, tags, persons } => {
+            TodoAction::Create { desc, status, priority, due_date, category, location, tags, people } => {
                 let mut args = json!({
                     "description": desc,
                     "status": status
@@ -659,9 +659,9 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(p) = priority { args["priority"] = json!(p); }
                 if let Some(d) = due_date { args["due_date"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
                 if !tags.is_empty() { args["tags"] = json!(tags); }
-                if !persons.is_empty() { args["persons"] = json!(persons); }
+                if !people.is_empty() { args["people"] = json!(people); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "create_todo".into(),
@@ -718,14 +718,14 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            TodoAction::Update { id, desc, status, priority, due_date, category, place } => {
+            TodoAction::Update { id, desc, status, priority, due_date, category, location } => {
                 let mut args = json!({"id": id});
                 if let Some(d) = desc { args["description"] = json!(d); }
                 if let Some(s) = status { args["status"] = json!(s); }
                 if let Some(p) = priority { args["priority"] = json!(p); }
                 if let Some(d) = due_date { args["due_date"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "update_todo".into(),
@@ -768,15 +768,15 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Journal { action } => match action {
-            JournalAction::Create { content, date, category, place, tags, persons } => {
+            JournalAction::Create { content, date, category, location, tags, people } => {
                 let mut args = json!({
                     "content": content,
                 });
                 if let Some(d) = date { args["date"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
                 if !tags.is_empty() { args["tags"] = json!(tags); }
-                if !persons.is_empty() { args["persons"] = json!(persons); }
+                if !people.is_empty() { args["people"] = json!(people); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "create_journal".into(),
@@ -870,12 +870,12 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
-            JournalAction::Update { id, content, date, category, place } => {
+            JournalAction::Update { id, content, date, category, location } => {
                 let mut args = json!({"id": id});
                 if let Some(c) = content { args["content"] = json!(c); }
                 if let Some(d) = date { args["date"] = json!(d); }
                 if let Some(c) = category { args["category"] = json!(c); }
-                if let Some(p) = place { args["place"] = json!(p); }
+                if let Some(l) = location { args["location"] = json!(l); }
 
                 let resp = tracker.handle(&logbook::Request {
                     tool: "update_journal".into(),

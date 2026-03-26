@@ -10,11 +10,11 @@ pub struct Activity {
     pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
-    #[serde(rename = "place", default)]
+    #[serde(rename = "location", default)]
     pub place_name: Option<String>,
     #[serde(rename = "tags", default)]
     pub tag_names: Vec<String>,
-    #[serde(rename = "persons", default)]
+    #[serde(rename = "people", default)]
     pub person_names: Vec<String>,
 }
 
@@ -58,7 +58,7 @@ mod tests {
         assert!(serialized.contains("Team Meeting"));
         // Check renamed fields
         assert!(serialized.contains("\"category\""));
-        assert!(serialized.contains("\"place\""));
+        assert!(serialized.contains("\"location\""));
     }
 
     #[test]
@@ -71,9 +71,9 @@ mod tests {
             "category_id": 5,
             "place_id": null,
             "category": "Fitness",
-            "place": null,
+            "location": null,
             "tags": ["health", "weekly"],
-            "persons": []
+            "people": []
         });
 
         let activity: Activity = serde_json::from_value(json).unwrap();

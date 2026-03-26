@@ -59,7 +59,7 @@ pub struct UpdateTransactionArgs {
     pub place_id: Option<i64>,
     #[serde(rename = "category")]
     pub category_name: Option<String>,
-    #[serde(rename = "place")]
+    #[serde(rename = "location")]
     pub place_name: Option<String>,
 }
 
@@ -73,7 +73,7 @@ pub struct UpdateActivityArgs {
     pub place_id: Option<i64>,
     #[serde(rename = "category")]
     pub category_name: Option<String>,
-    #[serde(rename = "place")]
+    #[serde(rename = "location")]
     pub place_name: Option<String>,
 }
 
@@ -393,7 +393,7 @@ mod tests {
         let serialized = serde_json::to_string(&args).unwrap();
         // Check that the renamed fields use the renamed keys
         assert!(serialized.contains("\"category\""));
-        assert!(serialized.contains("\"place\""));
+        assert!(serialized.contains("\"location\""));
         assert!(serialized.contains("Food"));
         assert!(serialized.contains("Store"));
     }

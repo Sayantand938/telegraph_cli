@@ -9,11 +9,11 @@ pub struct JournalEntry {
     pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
-    #[serde(rename = "place", default)]
+    #[serde(rename = "location", default)]
     pub place_name: Option<String>,
     #[serde(rename = "tags", default)]
     pub tag_names: Vec<String>,
-    #[serde(rename = "persons", default)]
+    #[serde(rename = "people", default)]
     pub person_names: Vec<String>,
     pub created_at: String,
 }
@@ -57,7 +57,7 @@ mod tests {
         assert!(serialized.contains("2026-03-26"));
         assert!(serialized.contains("\"category\""));
         assert!(serialized.contains("\"tags\""));
-        assert!(serialized.contains("\"persons\""));
+        assert!(serialized.contains("\"people\""));
     }
 
     #[test]
@@ -69,9 +69,9 @@ mod tests {
             "category_id": 2,
             "place_id": null,
             "category": "Work",
-            "place": null,
+            "location": null,
             "tags": ["milestone", "team"],
-            "persons": ["Alice", "Bob"],
+            "people": ["Alice", "Bob"],
             "created_at": "2026-03-25T18:00:00Z"
         });
 

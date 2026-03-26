@@ -10,11 +10,11 @@ pub struct Transaction {
     pub place_id: Option<i64>,
     #[serde(rename = "category", default)]
     pub category_name: Option<String>,
-    #[serde(rename = "place", default)]
+    #[serde(rename = "location", default)]
     pub place_name: Option<String>,
     #[serde(rename = "tags", default)]
     pub tag_names: Vec<String>,
-    #[serde(rename = "persons", default)]
+    #[serde(rename = "people", default)]
     pub person_names: Vec<String>,
 }
 
@@ -60,7 +60,7 @@ mod tests {
         assert!(serialized.contains("Groceries"));
         // Check renamed fields
         assert!(serialized.contains("\"category\""));
-        assert!(serialized.contains("\"place\""));
+        assert!(serialized.contains("\"location\""));
         assert!(serialized.contains("Food"));
         assert!(serialized.contains("Supermarket"));
     }
@@ -75,9 +75,9 @@ mod tests {
             "category_id": 4,
             "place_id": null,
             "category": "Fun",
-            "place": null,
+            "location": null,
             "tags": ["weekend"],
-            "persons": ["Alice", "Bob"]
+            "people": ["Alice", "Bob"]
         });
 
         let tx: Transaction = serde_json::from_value(json).unwrap();
@@ -101,9 +101,9 @@ mod tests {
             "category_id": null,
             "place_id": null,
             "category": null,
-            "place": null,
+            "location": null,
             "tags": [],
-            "persons": []
+            "people": []
         });
 
         let tx: Transaction = serde_json::from_value(json).unwrap();

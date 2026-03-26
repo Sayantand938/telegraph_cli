@@ -27,15 +27,15 @@ pub async fn process_todo_request(
             };
             
             // Handle place by name or id
-            let place_id = if args["place"].is_string() {
-                let place_name = args["place"].as_str().unwrap();
+            let place_id = if args["location"].is_string() {
+                let place_name = args["location"].as_str().unwrap();
                 Some(db::upsert_place(pool, place_name).await?)
             } else if args["place_id"].is_i64() {
                 args["place_id"].as_i64()
             } else {
                 None
             };
-            
+
             let todo_id = db::add_todo(
                 pool,
                 &description,
@@ -45,7 +45,7 @@ pub async fn process_todo_request(
                 category_id,
                 place_id,
             ).await?;
-            
+
             // Handle tags
             if let Some(tags) = args["tags"].as_array() {
                 let mut tag_ids = Vec::new();
@@ -57,11 +57,11 @@ pub async fn process_todo_request(
                 }
                 db::set_todo_tags(pool, todo_id, &tag_ids).await?;
             }
-            
+
             // Handle persons
-            if let Some(persons) = args["persons"].as_array() {
+            if let Some(people) = args["people"].as_array() {
                 let mut person_ids = Vec::new();
-                for person_val in persons {
+                for person_val in people {
                     if let Some(person_name) = person_val.as_str() {
                         let person_id = db::upsert_person(pool, person_name).await?;
                         person_ids.push(person_id);
@@ -120,8 +120,8 @@ pub async fn process_todo_request(
             };
             
             // Handle place by name or id
-            let place_id = if args["place"].is_string() {
-                let place_name = args["place"].as_str().unwrap();
+            let place_id = if args["location"].is_string() {
+                let place_name = args["location"].as_str().unwrap();
                 Some(db::upsert_place(pool, place_name).await?)
             } else if args["place_id"].is_i64() {
                 args["place_id"].as_i64()

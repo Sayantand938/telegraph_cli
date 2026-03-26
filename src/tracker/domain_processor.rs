@@ -147,7 +147,7 @@ pub fn extract_tag_ids(args: &Value) -> Vec<i64> {
 
 /// Helper to extract person IDs from JSON args
 pub fn extract_person_ids(args: &Value) -> Vec<i64> {
-    args["persons"].as_array()
+    args["people"].as_array()
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_i64())
@@ -170,7 +170,7 @@ pub fn extract_tag_names(args: &Value) -> Vec<String> {
 
 /// Helper to extract person names from JSON args
 pub fn extract_person_names(args: &Value) -> Vec<String> {
-    args["persons"].as_array()
+    args["people"].as_array()
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str())
