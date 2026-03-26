@@ -1,7 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use crate::error::AppResult;
 use crate::types::Activity;
-use super::{get_activity_tags, get_activity_persons};
+use crate::db::{get_activity_tags, get_activity_persons};
 
 pub async fn add_activity(
     pool: &SqlitePool,
@@ -41,7 +41,7 @@ pub async fn get_activity(pool: &SqlitePool, id: i64) -> AppResult<Option<Activi
             let cat_id: Option<i64> = row.try_get("category_id").ok().flatten();
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
 
-            // Fetch tags and persons
+            // Fetch tags and persons via junction helpers
             let tags = get_activity_tags(pool, id).await?;
             let persons = get_activity_persons(pool, id).await?;
 
@@ -84,24 +84,19 @@ pub async fn list_activities(
         query.push_str(&conditions.join(" AND "));
     }
 
-    let rows = if category_id.is_some() && place_id.is_some() {
+    let rows = if conditions.is_empty() {
+        sqlx::query(&query).fetch_all(pool).await?
+    } else if conditions.len() == 1 {
         sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if category_id.is_some() {
-        sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if place_id.is_some() {
-        sqlx::query(&query)
-            .bind(place_id.unwrap())
+            .bind(category_id.or(place_id).unwrap())
             .fetch_all(pool)
             .await?
     } else {
-        sqlx::query(&query).fetch_all(pool).await?
+        sqlx::query(&query)
+            .bind(category_id.unwrap())
+            .bind(place_id.unwrap())
+            .fetch_all(pool)
+            .await?
     };
 
     let mut activities = Vec::new();
@@ -143,46 +138,54 @@ pub async fn update_activity(
         ));
     }
 
-    if let Some(start) = start {
-        sqlx::query("UPDATE activities SET start_time = ? WHERE id = ?")
-            .bind(start)
-            .bind(id)
-            .execute(pool)
-            .await?;
+    let mut updates = Vec::new();
+    let mut bind_count = 0;
+
+    if start.is_some() {
+        updates.push(format!("start_time = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if stop.is_some() {
+        updates.push(format!("stop_time = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if desc.is_some() {
+        updates.push(format!("description = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if category_id.is_some() {
+        updates.push(format!("category_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if place_id.is_some() {
+        updates.push(format!("place_id = ?{}", bind_count + 1));
+        bind_count += 1;
     }
 
-    if let Some(stop) = stop {
-        sqlx::query("UPDATE activities SET stop_time = ? WHERE id = ?")
-            .bind(stop)
-            .bind(id)
-            .execute(pool)
-            .await?;
+    let mut query = format!("UPDATE activities SET {} WHERE id = ?", updates.join(", "));
+    for i in (1..=bind_count).rev() {
+        query = query.replace(&format!("?{}", i), "?");
     }
 
-    if let Some(desc) = desc {
-        sqlx::query("UPDATE activities SET description = ? WHERE id = ?")
-            .bind(desc)
-            .bind(id)
-            .execute(pool)
-            .await?;
+    let mut db_query = sqlx::query(&query);
+    if let Some(s) = start {
+        db_query = db_query.bind(s);
     }
-
+    if let Some(s) = stop {
+        db_query = db_query.bind(s);
+    }
+    if let Some(d) = desc {
+        db_query = db_query.bind(d);
+    }
     if let Some(cat_id) = category_id {
-        sqlx::query("UPDATE activities SET category_id = ? WHERE id = ?")
-            .bind(cat_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(cat_id);
     }
-
     if let Some(p_id) = place_id {
-        sqlx::query("UPDATE activities SET place_id = ? WHERE id = ?")
-            .bind(p_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(p_id);
     }
+    db_query = db_query.bind(id);
 
+    db_query.execute(pool).await?;
     Ok(())
 }
 
@@ -217,7 +220,7 @@ mod tests {
         let pool = create_test_pool().await;
         let cat_id = upsert_category(&pool, "Work").await.unwrap();
         let activity_id = add_activity(&pool, "09:00", "17:00", "Work day", Some(cat_id), None).await.unwrap();
-        
+
         let activity = get_activity(&pool, activity_id).await.unwrap().unwrap();
         assert_eq!(activity.category_id, Some(cat_id));
     }
@@ -227,7 +230,7 @@ mod tests {
         let pool = create_test_pool().await;
         let place_id = upsert_place(&pool, "Office").await.unwrap();
         let activity_id = add_activity(&pool, "09:00", "17:00", "Work day", None, Some(place_id)).await.unwrap();
-        
+
         let activity = get_activity(&pool, activity_id).await.unwrap().unwrap();
         assert_eq!(activity.place_id, Some(place_id));
     }
@@ -245,7 +248,7 @@ mod tests {
         add_activity(&pool, "09:00", "10:00", "First", None, None).await.unwrap();
         add_activity(&pool, "11:00", "12:00", "Second", None, None).await.unwrap();
         add_activity(&pool, "14:00", "15:00", "Third", None, None).await.unwrap();
-        
+
         let activities = list_activities(&pool, None, None).await.unwrap();
         assert_eq!(activities.len(), 3);
     }
@@ -254,9 +257,9 @@ mod tests {
     async fn test_update_activity_times() {
         let pool = create_test_pool().await;
         let id = add_activity(&pool, "09:00", "10:00", "Original", None, None).await.unwrap();
-        
+
         update_activity(&pool, id, Some("10:00"), Some("11:00"), None, None, None).await.unwrap();
-        
+
         let activity = get_activity(&pool, id).await.unwrap().unwrap();
         assert_eq!(activity.start_time, "10:00");
         assert_eq!(activity.stop_time, "11:00");
@@ -266,7 +269,7 @@ mod tests {
     async fn test_update_activity_no_fields() {
         let pool = create_test_pool().await;
         let id = add_activity(&pool, "09:00", "10:00", "Original", None, None).await.unwrap();
-        
+
         let result = update_activity(&pool, id, None, None, None, None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Nothing to update"));
@@ -276,9 +279,9 @@ mod tests {
     async fn test_delete_activity() {
         let pool = create_test_pool().await;
         let id = add_activity(&pool, "09:00", "10:00", "To Delete", None, None).await.unwrap();
-        
+
         delete_activity(&pool, id).await.unwrap();
-        
+
         let activity = get_activity(&pool, id).await.unwrap();
         assert!(activity.is_none());
     }

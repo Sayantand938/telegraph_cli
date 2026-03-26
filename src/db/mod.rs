@@ -1,3 +1,4 @@
+mod macros;
 mod categories;
 mod places;
 mod tags;

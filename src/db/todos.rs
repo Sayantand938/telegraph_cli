@@ -1,7 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use crate::error::AppResult;
 use crate::types::Todo;
-use super::{get_todo_tags, get_todo_persons};
+use crate::db::{get_todo_tags, get_todo_persons};
 
 pub async fn add_todo(
     pool: &SqlitePool,
@@ -13,7 +13,7 @@ pub async fn add_todo(
     place_id: Option<i64>,
 ) -> AppResult<i64> {
     let result = sqlx::query(
-        "INSERT INTO todos (description, status, priority, due_date, created_at, category_id, place_id) 
+        "INSERT INTO todos (description, status, priority, due_date, created_at, category_id, place_id)
          VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(description)
@@ -30,7 +30,7 @@ pub async fn add_todo(
 
 pub async fn get_todo(pool: &SqlitePool, id: i64) -> AppResult<Option<Todo>> {
     let row = sqlx::query(
-        "SELECT id, description, status, priority, due_date, created_at, completed_at, category_id, place_id 
+        "SELECT id, description, status, priority, due_date, created_at, completed_at, category_id, place_id
          FROM todos WHERE id = ?"
     )
     .bind(id)
@@ -49,7 +49,7 @@ pub async fn get_todo(pool: &SqlitePool, id: i64) -> AppResult<Option<Todo>> {
             let cat_id: Option<i64> = row.try_get("category_id").ok().flatten();
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
 
-            // Fetch tags and persons
+            // Fetch tags and persons via junction helpers
             let tags = get_todo_tags(pool, id).await?;
             let persons = get_todo_persons(pool, id).await?;
 
@@ -103,100 +103,24 @@ pub async fn list_todos(
         query.push_str(&conditions.join(" AND "));
     }
 
-    let rows = if status.is_some() && priority.is_some() && category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(priority.unwrap())
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && priority.is_some() && category_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(priority.unwrap())
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && priority.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(priority.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if priority.is_some() && category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(priority.unwrap())
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && priority.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(priority.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && category_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if priority.is_some() && category_id.is_some() {
-        sqlx::query(&query)
-            .bind(priority.unwrap())
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if priority.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(priority.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if status.is_some() {
-        sqlx::query(&query)
-            .bind(status.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if priority.is_some() {
-        sqlx::query(&query)
-            .bind(priority.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if category_id.is_some() {
-        sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if place_id.is_some() {
-        sqlx::query(&query)
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else {
+    // Build query dynamically based on number of conditions
+    let rows = if conditions.is_empty() {
         sqlx::query(&query).fetch_all(pool).await?
+    } else {
+        let mut db_query = sqlx::query(&query);
+        if let Some(s) = status {
+            db_query = db_query.bind(s);
+        }
+        if let Some(p) = priority {
+            db_query = db_query.bind(p);
+        }
+        if let Some(cat) = category_id {
+            db_query = db_query.bind(cat);
+        }
+        if let Some(place) = place_id {
+            db_query = db_query.bind(place);
+        }
+        db_query.fetch_all(pool).await?
     };
 
     let mut todos = Vec::new();
@@ -239,61 +163,68 @@ pub async fn update_todo(
     category_id: Option<i64>,
     place_id: Option<i64>,
 ) -> AppResult<()> {
-    if description.is_none() && status.is_none() && priority.is_none() 
+    if description.is_none() && status.is_none() && priority.is_none()
         && due_date.is_none() && category_id.is_none() && place_id.is_none() {
         return Err(crate::error::AppError::ValidationError(
             "Nothing to update. Provide description, status, priority, due_date, category, or place.".to_string(),
         ));
     }
 
-    if let Some(desc) = description {
-        sqlx::query("UPDATE todos SET description = ? WHERE id = ?")
-            .bind(desc)
-            .bind(id)
-            .execute(pool)
-            .await?;
+    let mut updates = Vec::new();
+    let mut bind_count = 0;
+
+    if description.is_some() {
+        updates.push(format!("description = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if status.is_some() {
+        updates.push(format!("status = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if priority.is_some() {
+        updates.push(format!("priority = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if due_date.is_some() {
+        updates.push(format!("due_date = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if category_id.is_some() {
+        updates.push(format!("category_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if place_id.is_some() {
+        updates.push(format!("place_id = ?{}", bind_count + 1));
+        bind_count += 1;
     }
 
+    let mut query = format!("UPDATE todos SET {} WHERE id = ?", updates.join(", "));
+    for i in (1..=bind_count).rev() {
+        query = query.replace(&format!("?{}", i), "?");
+    }
+
+    let mut db_query = sqlx::query(&query);
+    if let Some(d) = description {
+        db_query = db_query.bind(d);
+    }
     if let Some(s) = status {
-        sqlx::query("UPDATE todos SET status = ? WHERE id = ?")
-            .bind(s)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(s);
     }
-
     if let Some(p) = priority {
-        sqlx::query("UPDATE todos SET priority = ? WHERE id = ?")
-            .bind(p)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(p);
     }
-
     if let Some(d) = due_date {
-        sqlx::query("UPDATE todos SET due_date = ? WHERE id = ?")
-            .bind(d)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(d);
     }
-
     if let Some(cat_id) = category_id {
-        sqlx::query("UPDATE todos SET category_id = ? WHERE id = ?")
-            .bind(cat_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(cat_id);
     }
-
     if let Some(p_id) = place_id {
-        sqlx::query("UPDATE todos SET place_id = ? WHERE id = ?")
-            .bind(p_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(p_id);
     }
+    db_query = db_query.bind(id);
 
+    db_query.execute(pool).await?;
     Ok(())
 }
 
@@ -336,7 +267,7 @@ mod tests {
     async fn test_add_todo_with_priority_and_due() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "Important task", "pending", Some("high"), Some("2026-04-01"), None, None).await.unwrap();
-        
+
         let todo = get_todo(&pool, id).await.unwrap().unwrap();
         assert_eq!(todo.priority, Some("high".to_string()));
         assert_eq!(todo.due_date, Some("2026-04-01".to_string()));
@@ -347,7 +278,7 @@ mod tests {
         let pool = create_test_pool().await;
         let cat_id = upsert_category(&pool, "Work").await.unwrap();
         let todo_id = add_todo(&pool, "Work task", "pending", None, None, Some(cat_id), None).await.unwrap();
-        
+
         let todo = get_todo(&pool, todo_id).await.unwrap().unwrap();
         assert_eq!(todo.category_id, Some(cat_id));
     }
@@ -357,7 +288,7 @@ mod tests {
         let pool = create_test_pool().await;
         let place_id = upsert_place(&pool, "Office").await.unwrap();
         let todo_id = add_todo(&pool, "Office task", "pending", None, None, None, Some(place_id)).await.unwrap();
-        
+
         let todo = get_todo(&pool, todo_id).await.unwrap().unwrap();
         assert_eq!(todo.place_id, Some(place_id));
     }
@@ -375,7 +306,7 @@ mod tests {
         add_todo(&pool, "First", "pending", None, None, None, None).await.unwrap();
         add_todo(&pool, "Second", "in_progress", None, None, None, None).await.unwrap();
         add_todo(&pool, "Third", "completed", None, None, None, None).await.unwrap();
-        
+
         let todos = list_todos(&pool, None, None, None, None).await.unwrap();
         assert_eq!(todos.len(), 3);
     }
@@ -386,7 +317,7 @@ mod tests {
         add_todo(&pool, "First", "pending", None, None, None, None).await.unwrap();
         add_todo(&pool, "Second", "in_progress", None, None, None, None).await.unwrap();
         add_todo(&pool, "Third", "pending", None, None, None, None).await.unwrap();
-        
+
         let todos = list_todos(&pool, Some("pending"), None, None, None).await.unwrap();
         assert_eq!(todos.len(), 2);
         for todo in &todos {
@@ -400,7 +331,7 @@ mod tests {
         add_todo(&pool, "First", "pending", Some("high"), None, None, None).await.unwrap();
         add_todo(&pool, "Second", "pending", Some("low"), None, None, None).await.unwrap();
         add_todo(&pool, "Third", "pending", Some("high"), None, None, None).await.unwrap();
-        
+
         let todos = list_todos(&pool, None, Some("high"), None, None).await.unwrap();
         assert_eq!(todos.len(), 2);
     }
@@ -409,9 +340,9 @@ mod tests {
     async fn test_update_todo_description() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "Original", "pending", None, None, None, None).await.unwrap();
-        
+
         update_todo(&pool, id, Some("Updated description"), None, None, None, None, None).await.unwrap();
-        
+
         let todo = get_todo(&pool, id).await.unwrap().unwrap();
         assert_eq!(todo.description, "Updated description");
     }
@@ -420,9 +351,9 @@ mod tests {
     async fn test_update_todo_status() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "Task", "pending", None, None, None, None).await.unwrap();
-        
+
         update_todo(&pool, id, None, Some("in_progress"), None, None, None, None).await.unwrap();
-        
+
         let todo = get_todo(&pool, id).await.unwrap().unwrap();
         assert_eq!(todo.status, "in_progress");
     }
@@ -431,7 +362,7 @@ mod tests {
     async fn test_update_todo_no_fields() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "Task", "pending", None, None, None, None).await.unwrap();
-        
+
         let result = update_todo(&pool, id, None, None, None, None, None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Nothing to update"));
@@ -441,9 +372,9 @@ mod tests {
     async fn test_complete_todo() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "Task to complete", "pending", None, None, None, None).await.unwrap();
-        
+
         complete_todo(&pool, id).await.unwrap();
-        
+
         let todo = get_todo(&pool, id).await.unwrap().unwrap();
         assert_eq!(todo.status, "completed");
         assert!(todo.completed_at.is_some());
@@ -453,9 +384,9 @@ mod tests {
     async fn test_delete_todo() {
         let pool = create_test_pool().await;
         let id = add_todo(&pool, "To delete", "pending", None, None, None, None).await.unwrap();
-        
+
         delete_todo(&pool, id).await.unwrap();
-        
+
         let todo = get_todo(&pool, id).await.unwrap();
         assert!(todo.is_none());
     }

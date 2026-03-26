@@ -1,7 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use crate::error::AppResult;
 use crate::types::Transaction;
-use super::{get_transaction_tags, get_transaction_persons};
+use crate::db::{get_transaction_tags, get_transaction_persons};
 
 pub async fn add_transaction(
     pool: &SqlitePool,
@@ -42,7 +42,7 @@ pub async fn get_transaction(pool: &SqlitePool, id: i64) -> AppResult<Option<Tra
             let cat_id: Option<i64> = row.try_get("category_id").ok().flatten();
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
 
-            // Fetch tags and persons
+            // Fetch tags and persons via junction helpers
             let tags = get_transaction_tags(pool, id).await?;
             let persons = get_transaction_persons(pool, id).await?;
 
@@ -89,48 +89,21 @@ pub async fn list_transactions(
         query.push_str(&conditions.join(" AND "));
     }
 
-    let rows = if kind_filter.is_some() && category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(kind_filter.unwrap())
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if kind_filter.is_some() && category_id.is_some() {
-        sqlx::query(&query)
-            .bind(kind_filter.unwrap())
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if kind_filter.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(kind_filter.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if category_id.is_some() && place_id.is_some() {
-        sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if kind_filter.is_some() {
-        sqlx::query(&query)
-            .bind(kind_filter.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if category_id.is_some() {
-        sqlx::query(&query)
-            .bind(category_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else if place_id.is_some() {
-        sqlx::query(&query)
-            .bind(place_id.unwrap())
-            .fetch_all(pool)
-            .await?
-    } else {
+    // Build query dynamically based on which filters are provided
+    let rows = if conditions.is_empty() {
         sqlx::query(&query).fetch_all(pool).await?
+    } else {
+        let mut db_query = sqlx::query(&query);
+        if let Some(kind) = kind_filter {
+            db_query = db_query.bind(kind);
+        }
+        if let Some(cat) = category_id {
+            db_query = db_query.bind(cat);
+        }
+        if let Some(place) = place_id {
+            db_query = db_query.bind(place);
+        }
+        db_query.fetch_all(pool).await?
     };
 
     let mut transactions = Vec::new();
@@ -172,46 +145,56 @@ pub async fn update_transaction(
         ));
     }
 
+    // Use helper to build dynamic update
+    let mut updates = Vec::new();
+    let mut bind_count = 0;
+
+    if amount.is_some() {
+        updates.push(format!("amount = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if kind.is_some() {
+        updates.push(format!("kind = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if desc.is_some() {
+        updates.push(format!("description = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if category_id.is_some() {
+        updates.push(format!("category_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if place_id.is_some() {
+        updates.push(format!("place_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+
+    let mut query = format!("UPDATE transactions SET {} WHERE id = ?", updates.join(", "));
+    // Replace ?N with ? for SQLite
+    for i in (1..=bind_count).rev() {
+        query = query.replace(&format!("?{}", i), "?");
+    }
+
+    let mut db_query = sqlx::query(&query);
     if let Some(amount) = amount {
-        sqlx::query("UPDATE transactions SET amount = ? WHERE id = ?")
-            .bind(amount)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(amount);
     }
-
     if let Some(kind) = kind {
-        sqlx::query("UPDATE transactions SET kind = ? WHERE id = ?")
-            .bind(kind)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(kind);
     }
-
     if let Some(desc) = desc {
-        sqlx::query("UPDATE transactions SET description = ? WHERE id = ?")
-            .bind(desc)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(desc);
     }
-
     if let Some(cat_id) = category_id {
-        sqlx::query("UPDATE transactions SET category_id = ? WHERE id = ?")
-            .bind(cat_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(cat_id);
     }
-
     if let Some(p_id) = place_id {
-        sqlx::query("UPDATE transactions SET place_id = ? WHERE id = ?")
-            .bind(p_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(p_id);
     }
+    db_query = db_query.bind(id);
 
+    db_query.execute(pool).await?;
     Ok(())
 }
 
@@ -246,7 +229,7 @@ mod tests {
         let pool = create_test_pool().await;
         let cat_id = upsert_category(&pool, "Food").await.unwrap();
         let tx_id = add_transaction(&pool, 50.0, "shopping", "Groceries", Some(cat_id), None).await.unwrap();
-        
+
         let tx = get_transaction(&pool, tx_id).await.unwrap().unwrap();
         assert_eq!(tx.category_id, Some(cat_id));
     }
@@ -256,7 +239,7 @@ mod tests {
         let pool = create_test_pool().await;
         let place_id = upsert_place(&pool, "Supermarket").await.unwrap();
         let tx_id = add_transaction(&pool, 75.0, "shopping", "Groceries", None, Some(place_id)).await.unwrap();
-        
+
         let tx = get_transaction(&pool, tx_id).await.unwrap().unwrap();
         assert_eq!(tx.place_id, Some(place_id));
     }
@@ -274,7 +257,7 @@ mod tests {
         add_transaction(&pool, 10.0, "test", "First", None, None).await.unwrap();
         add_transaction(&pool, 20.0, "test", "Second", None, None).await.unwrap();
         add_transaction(&pool, 30.0, "other", "Third", None, None).await.unwrap();
-        
+
         let transactions = list_transactions(&pool, None, None, None).await.unwrap();
         assert_eq!(transactions.len(), 3);
     }
@@ -285,7 +268,7 @@ mod tests {
         add_transaction(&pool, 10.0, "shopping", "First", None, None).await.unwrap();
         add_transaction(&pool, 20.0, "entertainment", "Second", None, None).await.unwrap();
         add_transaction(&pool, 30.0, "shopping", "Third", None, None).await.unwrap();
-        
+
         let transactions = list_transactions(&pool, Some("shopping"), None, None).await.unwrap();
         assert_eq!(transactions.len(), 2);
         for tx in &transactions {
@@ -297,9 +280,9 @@ mod tests {
     async fn test_update_transaction_amount() {
         let pool = create_test_pool().await;
         let id = add_transaction(&pool, 100.0, "test", "Original", None, None).await.unwrap();
-        
+
         update_transaction(&pool, id, Some(200.0), None, None, None, None).await.unwrap();
-        
+
         let tx = get_transaction(&pool, id).await.unwrap().unwrap();
         assert_eq!(tx.amount, 200.0);
     }
@@ -308,7 +291,7 @@ mod tests {
     async fn test_update_transaction_no_fields() {
         let pool = create_test_pool().await;
         let id = add_transaction(&pool, 100.0, "test", "Original", None, None).await.unwrap();
-        
+
         let result = update_transaction(&pool, id, None, None, None, None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Nothing to update"));
@@ -318,9 +301,9 @@ mod tests {
     async fn test_delete_transaction() {
         let pool = create_test_pool().await;
         let id = add_transaction(&pool, 100.0, "test", "To Delete", None, None).await.unwrap();
-        
+
         delete_transaction(&pool, id).await.unwrap();
-        
+
         let tx = get_transaction(&pool, id).await.unwrap();
         assert!(tx.is_none());
     }

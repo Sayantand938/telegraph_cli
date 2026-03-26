@@ -1,7 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use crate::error::AppResult;
 use crate::types::JournalEntry;
-use super::{get_journal_tags, get_journal_persons};
+use crate::db::{get_journal_tags, get_journal_persons};
 
 pub async fn add_journal_entry(
     pool: &SqlitePool,
@@ -11,7 +11,7 @@ pub async fn add_journal_entry(
     place_id: Option<i64>,
 ) -> AppResult<i64> {
     let result = sqlx::query(
-        "INSERT INTO journal_entries (content, date, category_id, place_id, created_at) 
+        "INSERT INTO journal_entries (content, date, category_id, place_id, created_at)
          VALUES (?, ?, ?, ?, ?)"
     )
     .bind(content)
@@ -41,7 +41,7 @@ pub async fn get_journal_entry(pool: &SqlitePool, id: i64) -> AppResult<Option<J
             let place_id: Option<i64> = row.try_get("place_id").ok().flatten();
             let created_at: String = row.try_get("created_at")?;
 
-            // Fetch tags and persons
+            // Fetch tags and persons via junction helpers
             let tags = get_journal_tags(pool, id).await?;
             let persons = get_journal_persons(pool, id).await?;
 
@@ -71,7 +71,7 @@ pub async fn list_journal_entries(
     let mut query = String::from(
         "SELECT id, content, date, category_id, place_id, created_at FROM journal_entries WHERE 1=1"
     );
-    
+
     if from_date.is_some() {
         query.push_str(" AND (date IS NULL OR date >= ?)");
     }
@@ -81,11 +81,11 @@ pub async fn list_journal_entries(
     if category_id.is_some() {
         query.push_str(" AND category_id = ?");
     }
-    
+
     query.push_str(" ORDER BY date DESC, created_at DESC");
 
     let mut db_query = sqlx::query_as::<_, (i64, String, Option<String>, Option<i64>, Option<i64>, String)>(&query);
-    
+
     if let Some(from) = from_date {
         db_query = db_query.bind(from);
     }
@@ -124,7 +124,7 @@ pub async fn search_journal_entries(
 ) -> AppResult<Vec<JournalEntry>> {
     // Use FTS5 for full-text search
     let mut sql = String::from(
-        "SELECT je.id, je.content, je.date, je.category_id, je.place_id, je.created_at 
+        "SELECT je.id, je.content, je.date, je.category_id, je.place_id, je.created_at
          FROM journal_entries je
          INNER JOIN journal_fts fts ON je.id = fts.rowid
          WHERE journal_fts MATCH ?"
@@ -186,38 +186,47 @@ pub async fn update_journal_entry(
         ));
     }
 
+    let mut updates = Vec::new();
+    let mut bind_count = 0;
+
+    if content.is_some() {
+        updates.push(format!("content = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if date.is_some() {
+        updates.push(format!("date = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if category_id.is_some() {
+        updates.push(format!("category_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+    if place_id.is_some() {
+        updates.push(format!("place_id = ?{}", bind_count + 1));
+        bind_count += 1;
+    }
+
+    let mut query = format!("UPDATE journal_entries SET {} WHERE id = ?", updates.join(", "));
+    for i in (1..=bind_count).rev() {
+        query = query.replace(&format!("?{}", i), "?");
+    }
+
+    let mut db_query = sqlx::query(&query);
     if let Some(c) = content {
-        sqlx::query("UPDATE journal_entries SET content = ? WHERE id = ?")
-            .bind(c)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(c);
     }
-
     if let Some(d) = date {
-        sqlx::query("UPDATE journal_entries SET date = ? WHERE id = ?")
-            .bind(d)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(d);
     }
-
     if let Some(cat_id) = category_id {
-        sqlx::query("UPDATE journal_entries SET category_id = ? WHERE id = ?")
-            .bind(cat_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(cat_id);
     }
-
     if let Some(p_id) = place_id {
-        sqlx::query("UPDATE journal_entries SET place_id = ? WHERE id = ?")
-            .bind(p_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
+        db_query = db_query.bind(p_id);
     }
+    db_query = db_query.bind(id);
 
+    db_query.execute(pool).await?;
     Ok(())
 }
 
@@ -251,7 +260,7 @@ mod tests {
     async fn test_add_journal_entry_with_date() {
         let pool = create_test_pool().await;
         let id = add_journal_entry(&pool, "Past event", Some("2026-03-20"), None, None).await.unwrap();
-        
+
         let entry = get_journal_entry(&pool, id).await.unwrap().unwrap();
         assert_eq!(entry.date, Some("2026-03-20".to_string()));
     }
@@ -261,7 +270,7 @@ mod tests {
         let pool = create_test_pool().await;
         let cat_id = upsert_category(&pool, "Personal").await.unwrap();
         let entry_id = add_journal_entry(&pool, "Family note", None, Some(cat_id), None).await.unwrap();
-        
+
         let entry = get_journal_entry(&pool, entry_id).await.unwrap().unwrap();
         assert_eq!(entry.category_id, Some(cat_id));
     }
@@ -279,7 +288,7 @@ mod tests {
         add_journal_entry(&pool, "First", Some("2026-03-20"), None, None).await.unwrap();
         add_journal_entry(&pool, "Second", Some("2026-03-21"), None, None).await.unwrap();
         add_journal_entry(&pool, "Third", None, None, None).await.unwrap();
-        
+
         let entries = list_journal_entries(&pool, None, None, None).await.unwrap();
         assert_eq!(entries.len(), 3);
     }
@@ -289,7 +298,7 @@ mod tests {
         let pool = create_test_pool().await;
         add_journal_entry(&pool, "Old", Some("2026-03-20"), None, None).await.unwrap();
         add_journal_entry(&pool, "New", Some("2026-03-25"), None, None).await.unwrap();
-        
+
         let entries = list_journal_entries(&pool, Some("2026-03-24"), None, None).await.unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].content, "New");
@@ -299,9 +308,9 @@ mod tests {
     async fn test_update_journal_entry_content() {
         let pool = create_test_pool().await;
         let id = add_journal_entry(&pool, "Original", None, None, None).await.unwrap();
-        
+
         update_journal_entry(&pool, id, Some("Updated content"), None, None, None).await.unwrap();
-        
+
         let entry = get_journal_entry(&pool, id).await.unwrap().unwrap();
         assert_eq!(entry.content, "Updated content");
     }
@@ -310,7 +319,7 @@ mod tests {
     async fn test_update_journal_entry_no_fields() {
         let pool = create_test_pool().await;
         let id = add_journal_entry(&pool, "Test", None, None, None).await.unwrap();
-        
+
         let result = update_journal_entry(&pool, id, None, None, None, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Nothing to update"));
@@ -320,9 +329,9 @@ mod tests {
     async fn test_delete_journal_entry() {
         let pool = create_test_pool().await;
         let id = add_journal_entry(&pool, "To delete", None, None, None).await.unwrap();
-        
+
         delete_journal_entry(&pool, id).await.unwrap();
-        
+
         let entry = get_journal_entry(&pool, id).await.unwrap();
         assert!(entry.is_none());
     }

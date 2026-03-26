@@ -1,6 +1,5 @@
 use sqlx::{SqlitePool, Row};
-use crate::error::AppResult;
-use crate::types::Person;
+use crate::{error::AppResult, types::Person, impl_person_junction};
 
 pub async fn upsert_person(pool: &SqlitePool, name: &str) -> AppResult<i64> {
     sqlx::query("INSERT OR IGNORE INTO persons (name) VALUES (?)")
@@ -50,149 +49,11 @@ pub async fn delete_person(pool: &SqlitePool, id: i64) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn set_transaction_persons(pool: &SqlitePool, transaction_id: i64, person_ids: &[i64]) -> AppResult<()> {
-    sqlx::query("DELETE FROM transaction_persons WHERE transaction_id = ?")
-        .bind(transaction_id)
-        .execute(pool)
-        .await?;
-
-    for person_id in person_ids {
-        sqlx::query("INSERT INTO transaction_persons (transaction_id, person_id) VALUES (?, ?)")
-            .bind(transaction_id)
-            .bind(person_id)
-            .execute(pool)
-            .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn set_activity_persons(pool: &SqlitePool, activity_id: i64, person_ids: &[i64]) -> AppResult<()> {
-    sqlx::query("DELETE FROM activity_persons WHERE activity_id = ?")
-        .bind(activity_id)
-        .execute(pool)
-        .await?;
-
-    for person_id in person_ids {
-        sqlx::query("INSERT INTO activity_persons (activity_id, person_id) VALUES (?, ?)")
-            .bind(activity_id)
-            .bind(person_id)
-            .execute(pool)
-            .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn get_transaction_persons(pool: &SqlitePool, transaction_id: i64) -> AppResult<Vec<Person>> {
-    let rows = sqlx::query(
-        "SELECT p.id, p.name FROM persons p
-         INNER JOIN transaction_persons tp ON p.id = tp.person_id
-         WHERE tp.transaction_id = ?"
-    )
-    .bind(transaction_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut persons = Vec::new();
-    for row in rows {
-        let id: i64 = row.try_get("id")?;
-        let name: String = row.try_get("name")?;
-        persons.push(Person { id: Some(id), name });
-    }
-    Ok(persons)
-}
-
-pub async fn get_activity_persons(pool: &SqlitePool, activity_id: i64) -> AppResult<Vec<Person>> {
-    let rows = sqlx::query(
-        "SELECT p.id, p.name FROM persons p
-         INNER JOIN activity_persons ap ON p.id = ap.person_id
-         WHERE ap.activity_id = ?"
-    )
-    .bind(activity_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut persons = Vec::new();
-    for row in rows {
-        let id: i64 = row.try_get("id")?;
-        let name: String = row.try_get("name")?;
-        persons.push(Person { id: Some(id), name });
-    }
-    Ok(persons)
-}
-
-pub async fn set_todo_persons(pool: &SqlitePool, todo_id: i64, person_ids: &[i64]) -> AppResult<()> {
-    sqlx::query("DELETE FROM todo_persons WHERE todo_id = ?")
-        .bind(todo_id)
-        .execute(pool)
-        .await?;
-
-    for person_id in person_ids {
-        sqlx::query("INSERT INTO todo_persons (todo_id, person_id) VALUES (?, ?)")
-            .bind(todo_id)
-            .bind(person_id)
-            .execute(pool)
-            .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn get_todo_persons(pool: &SqlitePool, todo_id: i64) -> AppResult<Vec<Person>> {
-    let rows = sqlx::query(
-        "SELECT p.id, p.name FROM persons p
-         INNER JOIN todo_persons tp ON p.id = tp.person_id
-         WHERE tp.todo_id = ?"
-    )
-    .bind(todo_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut persons = Vec::new();
-    for row in rows {
-        let id: i64 = row.try_get("id")?;
-        let name: String = row.try_get("name")?;
-        persons.push(Person { id: Some(id), name });
-    }
-    Ok(persons)
-}
-
-pub async fn set_journal_persons(pool: &SqlitePool, journal_id: i64, person_ids: &[i64]) -> AppResult<()> {
-    sqlx::query("DELETE FROM journal_persons WHERE journal_id = ?")
-        .bind(journal_id)
-        .execute(pool)
-        .await?;
-
-    for person_id in person_ids {
-        sqlx::query("INSERT INTO journal_persons (journal_id, person_id) VALUES (?, ?)")
-            .bind(journal_id)
-            .bind(person_id)
-            .execute(pool)
-            .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn get_journal_persons(pool: &SqlitePool, journal_id: i64) -> AppResult<Vec<Person>> {
-    let rows = sqlx::query(
-        "SELECT p.id, p.name FROM persons p
-         INNER JOIN journal_persons jp ON p.id = jp.person_id
-         WHERE jp.journal_id = ?"
-    )
-    .bind(journal_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut persons = Vec::new();
-    for row in rows {
-        let id: i64 = row.try_get("id")?;
-        let name: String = row.try_get("name")?;
-        persons.push(Person { id: Some(id), name });
-    }
-    Ok(persons)
-}
+// Use macros to generate junction table operations
+impl_person_junction!(transaction, transaction_persons, transaction);
+impl_person_junction!(activity, activity_persons, activity);
+impl_person_junction!(todo, todo_persons, todo);
+impl_person_junction!(journal, journal_persons, journal);
 
 #[cfg(test)]
 mod tests {
@@ -227,7 +88,7 @@ mod tests {
         upsert_person(&pool, "Zoe").await.unwrap();
         upsert_person(&pool, "Alice").await.unwrap();
         upsert_person(&pool, "Mike").await.unwrap();
-        
+
         let persons = list_persons(&pool).await.unwrap();
         assert_eq!(persons.len(), 3);
         assert_eq!(persons[0].name, "Alice");
@@ -238,13 +99,13 @@ mod tests {
     #[tokio::test]
     async fn test_set_transaction_persons() {
         let pool = create_test_pool().await;
-        
+
         let tx_id = add_transaction(&pool, 100.0, "test", "Test", None, None).await.unwrap();
         let person1_id = upsert_person(&pool, "Person1").await.unwrap();
         let person2_id = upsert_person(&pool, "Person2").await.unwrap();
-        
+
         set_transaction_persons(&pool, tx_id, &[person1_id, person2_id]).await.unwrap();
-        
+
         let persons = get_transaction_persons(&pool, tx_id).await.unwrap();
         assert_eq!(persons.len(), 2);
     }

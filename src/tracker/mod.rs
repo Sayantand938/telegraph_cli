@@ -1,3 +1,4 @@
+mod domain_processor;
 mod transactions;
 mod activities;
 mod todos;
