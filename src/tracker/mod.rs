@@ -1,5 +1,6 @@
 mod transactions;
 mod activities;
+mod todos;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -8,6 +9,7 @@ use crate::db;
 
 pub use transactions::process_transaction_request;
 pub use activities::process_activity_request;
+pub use todos::process_todo_request;
 
 #[derive(Clone)]
 pub struct Tracker {

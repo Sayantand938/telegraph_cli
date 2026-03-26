@@ -4,6 +4,7 @@ mod tags;
 mod persons;
 mod transactions;
 mod activities;
+mod todos;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -15,6 +16,7 @@ pub use tags::*;
 pub use persons::*;
 pub use transactions::*;
 pub use activities::*;
+pub use todos::*;
 
 pub async fn connect_db(db_path: Option<PathBuf>) -> AppResult<SqlitePool> {
     let path = if let Some(p) = db_path {
@@ -177,6 +179,57 @@ pub async fn init_tables(pool: &SqlitePool) -> AppResult<()> {
             place_id INTEGER,
             FOREIGN KEY (category_id) REFERENCES categories(id),
             FOREIGN KEY (place_id) REFERENCES places(id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Todos table with category_id and place_id
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            priority TEXT,
+            due_date TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            category_id INTEGER,
+            place_id INTEGER,
+            FOREIGN KEY (category_id) REFERENCES categories(id),
+            FOREIGN KEY (place_id) REFERENCES places(id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Todo-Tags junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS todo_tags (
+            todo_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (todo_id, tag_id),
+            FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Todo-Persons junction table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS todo_persons (
+            todo_id INTEGER NOT NULL,
+            person_id INTEGER NOT NULL,
+            PRIMARY KEY (todo_id, person_id),
+            FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
         );
         "#,
     )

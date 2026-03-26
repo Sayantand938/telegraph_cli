@@ -122,6 +122,42 @@ pub async fn get_activity_persons(pool: &SqlitePool, activity_id: i64) -> AppRes
     Ok(persons)
 }
 
+pub async fn set_todo_persons(pool: &SqlitePool, todo_id: i64, person_ids: &[i64]) -> AppResult<()> {
+    sqlx::query("DELETE FROM todo_persons WHERE todo_id = ?")
+        .bind(todo_id)
+        .execute(pool)
+        .await?;
+
+    for person_id in person_ids {
+        sqlx::query("INSERT INTO todo_persons (todo_id, person_id) VALUES (?, ?)")
+            .bind(todo_id)
+            .bind(person_id)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_todo_persons(pool: &SqlitePool, todo_id: i64) -> AppResult<Vec<Person>> {
+    let rows = sqlx::query(
+        "SELECT p.id, p.name FROM persons p
+         INNER JOIN todo_persons tp ON p.id = tp.person_id
+         WHERE tp.todo_id = ?"
+    )
+    .bind(todo_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut persons = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        persons.push(Person { id: Some(id), name });
+    }
+    Ok(persons)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

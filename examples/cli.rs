@@ -29,6 +29,11 @@ enum Commands {
         #[command(subcommand)]
         action: ActivityAction,
     },
+    /// Todo operations
+    Todo {
+        #[command(subcommand)]
+        action: TodoAction,
+    },
     /// Category operations
     Category {
         #[command(subcommand)]
@@ -197,6 +202,68 @@ enum PersonAction {
     /// List all persons
     List,
     /// Delete a person
+    Delete {
+        #[arg(long)]
+        id: i64,
+    },
+}
+
+#[derive(Subcommand)]
+enum TodoAction {
+    /// Create a new todo
+    Create {
+        #[arg(long)]
+        desc: String,
+        #[arg(long, default_value = "pending")]
+        status: String,
+        #[arg(long)]
+        priority: Option<String>,
+        #[arg(long)]
+        due_date: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        place: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        persons: Vec<String>,
+    },
+    /// Get a todo by ID
+    Get {
+        #[arg(long)]
+        id: i64,
+    },
+    /// List todos
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        priority: Option<String>,
+    },
+    /// Update a todo
+    Update {
+        #[arg(long)]
+        id: i64,
+        #[arg(long)]
+        desc: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        priority: Option<String>,
+        #[arg(long)]
+        due_date: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        place: Option<String>,
+    },
+    /// Complete a todo
+    Complete {
+        #[arg(long)]
+        id: i64,
+    },
+    /// Delete a todo
     Delete {
         #[arg(long)]
         id: i64,
@@ -506,6 +573,123 @@ async fn main() -> anyhow::Result<()> {
             TagAction::Delete { id } => {
                 let resp = tracker.handle(&tx_tracker::Request {
                     tool: "delete_tag".into(),
+                    args: json!({"id": id}),
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+        },
+
+        Commands::Todo { action } => match action {
+            TodoAction::Create { desc, status, priority, due_date, category, place, tags, persons } => {
+                let mut args = json!({
+                    "description": desc,
+                    "status": status
+                });
+                if let Some(p) = priority { args["priority"] = json!(p); }
+                if let Some(d) = due_date { args["due_date"] = json!(d); }
+                if let Some(c) = category { args["category"] = json!(c); }
+                if let Some(p) = place { args["place"] = json!(p); }
+                if !tags.is_empty() { args["tags"] = json!(tags); }
+                if !persons.is_empty() { args["persons"] = json!(persons); }
+
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "create_todo".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            TodoAction::Get { id } => {
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "get_todo".into(),
+                    args: json!({"id": id}),
+                }).await;
+
+                if resp.success {
+                    if let Some(data) = resp.data {
+                        println!("{}", serde_json::to_string_pretty(&data)?);
+                    }
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            TodoAction::List { status, priority } => {
+                let mut args = json!({});
+                if let Some(s) = status { args["status"] = json!(s); }
+                if let Some(p) = priority { args["priority"] = json!(p); }
+
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "list_todos".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    if let Some(data) = resp.data {
+                        if let Some(arr) = data.as_array() {
+                            for item in arr {
+                                let id = item["id"].as_i64().unwrap_or(0);
+                                let desc = item["description"].as_str().unwrap_or("");
+                                let status = item["status"].as_str().unwrap_or("");
+                                let priority = item["priority"].as_str().unwrap_or("-");
+                                let due = item["due_date"].as_str().unwrap_or("-");
+                                println!("[{}] {} - {} (priority: {}, due: {})", id, desc, status, priority, due);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            TodoAction::Update { id, desc, status, priority, due_date, category, place } => {
+                let mut args = json!({"id": id});
+                if let Some(d) = desc { args["description"] = json!(d); }
+                if let Some(s) = status { args["status"] = json!(s); }
+                if let Some(p) = priority { args["priority"] = json!(p); }
+                if let Some(d) = due_date { args["due_date"] = json!(d); }
+                if let Some(c) = category { args["category"] = json!(c); }
+                if let Some(p) = place { args["place"] = json!(p); }
+
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "update_todo".into(),
+                    args,
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            TodoAction::Complete { id } => {
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "complete_todo".into(),
+                    args: json!({"id": id}),
+                }).await;
+
+                if resp.success {
+                    println!("✓ {}", resp.message.unwrap_or_default());
+                } else {
+                    eprintln!("✗ Error: {}", resp.error.unwrap_or_default());
+                    std::process::exit(1);
+                }
+            }
+            TodoAction::Delete { id } => {
+                let resp = tracker.handle(&tx_tracker::Request {
+                    tool: "delete_todo".into(),
                     args: json!({"id": id}),
                 }).await;
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::error::AppResult;
 use crate::db;
-use crate::tracker::{process_transaction_request, process_activity_request, Tracker};
+use crate::tracker::{process_transaction_request, process_activity_request, process_todo_request, Tracker};
 
 // ============== Request/Response Types ==============
 
@@ -150,6 +150,16 @@ impl Tracker {
             | "update_activity"
             | "delete_activity" => {
                 process_activity_request(self.pool(), &request.tool, &request.args).await
+            }
+
+            // Todo operations
+            "create_todo"
+            | "get_todo"
+            | "list_todos"
+            | "update_todo"
+            | "delete_todo"
+            | "complete_todo" => {
+                process_todo_request(self.pool(), &request.tool, &request.args).await
             }
 
             _ => Err(crate::error::AppError::ValidationError(format!("Unknown tool: {}", request.tool))),
